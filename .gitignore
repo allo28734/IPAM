@@ -1,0 +1,29 @@
+# Environments
+node_env/
+venv/
+.env
+__pycache__/
+*.pyc
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node
+node_modules/
+dist/
+build/
+npm-debug.log*
+
+# Database
+*.db
+*.sqlite3
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Downloads
+*.zip
