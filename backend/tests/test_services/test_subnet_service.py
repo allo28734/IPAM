@@ -105,6 +105,30 @@ class TestSubnetServiceCreate:
         assert logs[0].entity_type == "subnet"
         assert logs[0].action == "created"
 
+    def test_create_child_subnet_valid(self, db):
+        """A child subnet can overlap with its parent if strictly contained."""
+        svc = SubnetService(db)
+        parent = svc.create_subnet(name="Parent", cidr="10.0.0.0/16")
+        child = svc.create_subnet(name="Child", cidr="10.0.1.0/24", parent_id=parent.id)
+        
+        assert child.parent_id == parent.id
+
+    def test_reject_child_not_contained(self, db):
+        """Child CIDR must be strictly contained within parent CIDR."""
+        svc = SubnetService(db)
+        parent = svc.create_subnet(name="Parent", cidr="10.0.0.0/24")
+        with pytest.raises(SubnetValidationError, match="strictly contained"):
+            svc.create_subnet(name="Child", cidr="192.168.1.0/24", parent_id=parent.id)
+
+    def test_reject_child_overlap_with_sibling(self, db):
+        """Children of the same parent cannot overlap each other."""
+        svc = SubnetService(db)
+        parent = svc.create_subnet(name="Parent", cidr="10.0.0.0/16")
+        svc.create_subnet(name="Child1", cidr="10.0.1.0/24", parent_id=parent.id)
+        
+        with pytest.raises(SubnetConflictError, match="not a valid child"):
+            svc.create_subnet(name="Child2", cidr="10.0.1.128/25", parent_id=parent.id)
+
 
 class TestSubnetServiceRead:
     """Tests for subnet retrieval."""

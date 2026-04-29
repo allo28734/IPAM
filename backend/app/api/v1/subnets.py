@@ -10,7 +10,9 @@ Thin router that handles HTTP concerns only:
 This router contains ZERO business logic or direct database access.
 """
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status, UploadFile, File, Response, BackgroundTasks
+import ipaddress
+from app.services.sweep_service import run_subnet_sweep
 
 from app.api.deps import IPServiceDep, SubnetServiceDep
 from app.schemas.ip_address import IPAddressResponse
@@ -50,6 +52,36 @@ def list_subnets(
     )
 
 
+# ── Bulk Operations ─────────────────────────────────────────────
+
+
+@router.get("/export", response_class=Response)
+def export_subnets(service: SubnetServiceDep):
+    """Export all subnets as CSV."""
+    csv_data = service.export_csv()
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=subnets.csv"}
+    )
+
+
+@router.post("/import")
+async def import_subnets(service: SubnetServiceDep, file: UploadFile = File(...)):
+    """Import subnets from a CSV file."""
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+        
+    content = await file.read()
+    try:
+        csv_str = content.decode('utf-8-sig') # Handle BOM if present
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid file encoding. Must be UTF-8")
+        
+    result = service.bulk_import(csv_str)
+    return result
+
+
 # ── Create subnet ──────────────────────────────────────────────
 
 
@@ -63,6 +95,8 @@ def create_subnet(body: SubnetCreate, service: SubnetServiceDep):
             gateway=body.gateway,
             vlan_id=body.vlan_id,
             description=body.description,
+            parent_id=body.parent_id,
+            tags=body.tags,
         )
     except SubnetValidationError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
@@ -99,6 +133,8 @@ def update_subnet(subnet_id: int, body: SubnetUpdate, service: SubnetServiceDep)
             gateway=body.gateway,
             vlan_id=body.vlan_id,
             description=body.description,
+            parent_id=body.parent_id,
+            tags=body.tags,
         )
     except SubnetNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
@@ -132,3 +168,25 @@ def get_utilization(subnet_id: int, service: SubnetServiceDep):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
     return SubnetUtilization(**stats)
+
+
+# ── ICMP Sweep ──────────────────────────────────────────────────
+
+
+@router.post("/{subnet_id}/sweep")
+async def sweep_subnet_endpoint(subnet_id: int, service: SubnetServiceDep, background_tasks: BackgroundTasks):
+    """Trigger a background ICMP ping sweep for a subnet."""
+    try:
+        subnet = service.get_subnet(subnet_id)
+    except SubnetNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        
+    network = ipaddress.IPv4Network(subnet.cidr, strict=False)
+    if network.num_addresses > 2048:
+        raise HTTPException(
+            status_code=400, 
+            detail="Subnet too large for manual sweep. Please limit to /21 or smaller."
+        )
+        
+    background_tasks.add_task(run_subnet_sweep, subnet_id)
+    return {"message": "Sweep initiated in the background"}

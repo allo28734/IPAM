@@ -7,7 +7,7 @@ contain many IP addresses via the one-to-many relationship.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Integer, String
+from sqlalchemy import DateTime, Integer, String, ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -24,6 +24,11 @@ class Subnet(Base):
     gateway: Mapped[str | None] = mapped_column(String(15), nullable=True)
     vlan_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    
+    parent_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("subnets.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    tags: Mapped[dict | None] = mapped_column(JSON, default=dict, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -37,12 +42,19 @@ class Subnet(Base):
         nullable=False,
     )
 
-    # Relationship — one subnet has many IP addresses
     ip_addresses: Mapped[list["IPAddress"]] = relationship(
         "IPAddress",
         back_populates="subnet",
         cascade="all, delete-orphan",
         lazy="selectin",
+    )
+
+    # Self-referential hierarchical relationships
+    parent: Mapped["Subnet"] = relationship(
+        "Subnet", remote_side=[id], back_populates="children"
+    )
+    children: Mapped[list["Subnet"]] = relationship(
+        "Subnet", back_populates="parent"
     )
 
     def __repr__(self) -> str:

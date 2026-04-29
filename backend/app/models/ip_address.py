@@ -8,7 +8,7 @@ hostname and description.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Integer, String, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -32,6 +32,7 @@ class IPAddress(Base):
     last_seen: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    tags: Mapped[dict | None] = mapped_column(JSON, default=dict, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

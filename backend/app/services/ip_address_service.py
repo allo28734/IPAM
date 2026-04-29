@@ -13,6 +13,8 @@ with domain validation rules. This layer enforces:
 SoC boundary: This class has NO knowledge of HTTP requests/responses.
 """
 
+import csv
+import io
 import json
 from datetime import datetime, timezone
 
@@ -129,6 +131,7 @@ class IPAddressService:
         status: str = "assigned",
         hostname: str | None = None,
         description: str | None = None,
+        tags: dict | None = None,
     ) -> IPAddress:
         """
         Assign or reserve a specific IP address in a subnet.
@@ -176,6 +179,7 @@ class IPAddressService:
             status=status,
             hostname=hostname,
             description=description,
+            tags=tags or {},
         )
         created = self._ip_repo.create(ip)
 
@@ -196,6 +200,7 @@ class IPAddressService:
         status: str = "assigned",
         hostname: str | None = None,
         description: str | None = None,
+        tags: dict | None = None,
     ) -> IPAddress:
         """
         Automatically allocate the next available IP in a subnet.
@@ -225,6 +230,7 @@ class IPAddressService:
             status=status,
             hostname=hostname,
             description=description,
+            tags=tags or {},
         )
         created = self._ip_repo.create(ip)
 
@@ -245,6 +251,7 @@ class IPAddressService:
         status: str | None = None,
         hostname: str | None = None,
         description: str | None = None,
+        tags: dict | None = None,
     ) -> IPAddress:
         """Update IP address metadata and/or status."""
         ip = self.get_ip(ip_id)
@@ -262,6 +269,8 @@ class IPAddressService:
             update_data["hostname"] = hostname
         if description is not None:
             update_data["description"] = description
+        if tags is not None:
+            update_data["tags"] = tags
 
         if not update_data:
             return ip
@@ -334,3 +343,70 @@ class IPAddressService:
         )
         self._db.add(log)
         self._db.commit()
+
+    # ── Bulk Operations ──────────────────────────────────────────
+
+    def export_csv(self, subnet_id: int) -> str:
+        """Export all IPs in a subnet to a CSV string."""
+        ips = self.list_ips_in_subnet(subnet_id, limit=100000)
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Header
+        writer.writerow([
+            "id", "address", "status", "hostname", 
+            "description", "tags"
+        ])
+        
+        for ip in ips:
+            tags_str = json.dumps(ip.tags) if ip.tags else ""
+            writer.writerow([
+                ip.id, ip.address, ip.status, ip.hostname or "",
+                ip.description or "", tags_str
+            ])
+            
+        return output.getvalue()
+
+    def bulk_import(self, subnet_id: int, csv_content: str) -> dict:
+        """
+        Import IP addresses from a CSV string into a specific subnet.
+        """
+        reader = csv.DictReader(io.StringIO(csv_content))
+        rows = list(reader)
+        
+        created_count = 0
+        errors = []
+        
+        for idx, row in enumerate(rows):
+            address = row.get("address", "").strip()
+            if not address:
+                errors.append(f"Row {idx+1}: Missing required 'address'")
+                continue
+                
+            status = row.get("status", "").strip() or "assigned"
+            hostname = row.get("hostname", "").strip() or None
+            description = row.get("description", "").strip() or None
+            
+            tags_str = row.get("tags", "").strip()
+            tags = {}
+            if tags_str:
+                try:
+                    tags = json.loads(tags_str)
+                except json.JSONDecodeError:
+                    errors.append(f"Row {idx+1} ({address}): Invalid JSON in 'tags'")
+                    continue
+                    
+            try:
+                self.assign_ip(
+                    subnet_id=subnet_id,
+                    address=address,
+                    status=status,
+                    hostname=hostname,
+                    description=description,
+                    tags=tags
+                )
+                created_count += 1
+            except (IPValidationError, IPConflictError, SubnetNotFoundError) as e:
+                errors.append(f"Row {idx+1} ({address}): {str(e)}")
+                
+        return {"imported": created_count, "errors": errors}

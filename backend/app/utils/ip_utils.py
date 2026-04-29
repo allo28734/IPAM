@@ -57,6 +57,15 @@ def subnets_overlap(cidr_a: str, cidr_b: str) -> bool:
     return net_a.overlaps(net_b)
 
 
+def is_subnet_of(child_cidr: str, parent_cidr: str) -> bool:
+    """
+    Determine whether child_cidr is strictly a subnet of parent_cidr.
+    """
+    child_net = ipaddress.IPv4Network(child_cidr, strict=False)
+    parent_net = ipaddress.IPv4Network(parent_cidr, strict=False)
+    return child_net.subnet_of(parent_net)
+
+
 def find_overlapping_cidrs(new_cidr: str, existing_cidrs: list[str]) -> list[str]:
     """
     Given a new CIDR, return all existing CIDRs that overlap with it.

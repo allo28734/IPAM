@@ -543,3 +543,54 @@ a:hover {
   border-radius: var(--radius-full);
   transition: width 0.5s ease-out;
 }
+
+/* Tag Builder & Chips */
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 500;
+  background-color: rgba(99, 102, 241, 0.15);
+  color: var(--text-primary);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  backdrop-filter: blur(4px);
+  margin: 2px;
+}
+
+.tag-key {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.tag-remove {
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+}
+
+.tag-remove:hover {
+  color: var(--danger);
+}
+
+.tag-builder-inputs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px;
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-md);
+  min-height: 44px;
+}
+

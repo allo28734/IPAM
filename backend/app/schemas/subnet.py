@@ -23,6 +23,8 @@ class SubnetCreate(BaseModel):
     gateway: Optional[str] = Field(None, max_length=15, examples=["10.0.1.1"])
     vlan_id: Optional[int] = Field(None, ge=1, le=4094, examples=[100])
     description: Optional[str] = Field(None, max_length=500, examples=["Main office network"])
+    parent_id: Optional[int] = Field(None, description="ID of the parent subnet for hierarchical nesting")
+    tags: Optional[dict[str, str]] = Field(None, description="Custom key-value metadata tags")
 
 
 class SubnetUpdate(BaseModel):
@@ -32,6 +34,8 @@ class SubnetUpdate(BaseModel):
     gateway: Optional[str] = Field(None, max_length=15)
     vlan_id: Optional[int] = Field(None, ge=1, le=4094)
     description: Optional[str] = Field(None, max_length=500)
+    parent_id: Optional[int] = Field(None)
+    tags: Optional[dict[str, str]] = Field(None)
 
 
 # ── Response schemas ────────────────────────────────────────────
@@ -48,6 +52,8 @@ class SubnetResponse(BaseModel):
     gateway: Optional[str] = None
     vlan_id: Optional[int] = None
     description: Optional[str] = None
+    parent_id: Optional[int] = None
+    tags: Optional[dict[str, str]] = None
     created_at: datetime
     updated_at: datetime
 

@@ -5,7 +5,7 @@ Thin router for IP address CRUD and allocation operations.
 Delegates all business logic to IPAddressService.
 """
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status, UploadFile, File, Response
 
 from app.api.deps import IPServiceDep, SubnetServiceDep
 from app.schemas.ip_address import (
@@ -56,6 +56,40 @@ def list_ips_in_subnet(
     )
 
 
+# ── Bulk Operations ─────────────────────────────────────────────
+
+
+@router.get("/subnets/{subnet_id}/ips/export", response_class=Response)
+def export_ips(subnet_id: int, service: IPServiceDep):
+    """Export all IPs in a subnet as CSV."""
+    try:
+        csv_data = service.export_csv(subnet_id)
+    except SubnetNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=subnet_{subnet_id}_ips.csv"}
+    )
+
+
+@router.post("/subnets/{subnet_id}/ips/import")
+async def import_ips(subnet_id: int, service: IPServiceDep, file: UploadFile = File(...)):
+    """Import IP addresses from a CSV file."""
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+        
+    content = await file.read()
+    try:
+        csv_str = content.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid file encoding. Must be UTF-8")
+        
+    result = service.bulk_import(subnet_id, csv_str)
+    return result
+
+
 # ── Assign a specific IP ───────────────────────────────────────
 
 
@@ -73,6 +107,7 @@ def assign_ip(subnet_id: int, body: IPAddressCreate, service: IPServiceDep):
             status=body.status,
             hostname=body.hostname,
             description=body.description,
+            tags=body.tags,
         )
     except SubnetNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
@@ -102,6 +137,7 @@ def allocate_next_available(
             status=body.status,
             hostname=body.hostname,
             description=body.description,
+            tags=body.tags,
         )
     except SubnetNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
@@ -125,6 +161,7 @@ def update_ip(ip_id: int, body: IPAddressUpdate, service: IPServiceDep):
             status=body.status,
             hostname=body.hostname,
             description=body.description,
+            tags=body.tags,
         )
     except IPNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))

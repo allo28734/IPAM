@@ -15,6 +15,8 @@ raises exceptions. The API layer catches these exceptions and maps
 them to HTTP status codes.
 """
 
+import csv
+import io
 import json
 from datetime import datetime, timezone
 
@@ -30,6 +32,8 @@ from app.utils.ip_utils import (
     get_subnet_capacity,
     get_usable_host_range,
     is_ip_in_subnet,
+    is_subnet_of,
+    subnets_overlap,
     validate_cidr,
 )
 
@@ -128,6 +132,8 @@ class SubnetService:
         gateway: str | None = None,
         vlan_id: int | None = None,
         description: str | None = None,
+        parent_id: int | None = None,
+        tags: dict | None = None,
     ) -> Subnet:
         """
         Create a new subnet after validating all business rules.
@@ -143,14 +149,32 @@ class SubnetService:
         except ValueError as exc:
             raise SubnetValidationError(str(exc)) from exc
 
-        # 2. Check for overlaps with existing subnets
-        existing_cidrs = self._repo.get_all_cidrs()
-        overlaps = find_overlapping_cidrs(cidr, existing_cidrs)
-        if overlaps:
-            raise SubnetConflictError(
-                f"Subnet {cidr} overlaps with existing subnet(s): "
-                f"{', '.join(overlaps)}"
-            )
+        # 2. Parent validation and strict CIDR containment
+        if parent_id is not None:
+            parent = self.get_subnet(parent_id)
+            if not is_subnet_of(cidr, parent.cidr):
+                raise SubnetValidationError(
+                    f"Child subnet {cidr} must be strictly contained within parent {parent.cidr}"
+                )
+
+        # 3. Check for overlaps with existing subnets
+        existing_subnets = self._repo.get_all()
+        for existing in existing_subnets:
+            if subnets_overlap(cidr, existing.cidr):
+                # Overlaps are ONLY allowed if the existing subnet is an ancestor of the new subnet
+                is_ancestor = False
+                curr_parent_id = parent_id
+                while curr_parent_id is not None:
+                    if curr_parent_id == existing.id:
+                        is_ancestor = True
+                        break
+                    curr_parent = self.get_subnet(curr_parent_id)
+                    curr_parent_id = curr_parent.parent_id
+                
+                if not is_ancestor:
+                    raise SubnetConflictError(
+                        f"Subnet {cidr} overlaps with existing subnet {existing.cidr} and is not a valid child."
+                    )
 
         # 3. Validate gateway is within the subnet
         if gateway and not is_ip_in_subnet(gateway, cidr):
@@ -165,12 +189,14 @@ class SubnetService:
             gateway=gateway,
             vlan_id=vlan_id,
             description=description,
+            parent_id=parent_id,
+            tags=tags or {},
         )
         created = self._repo.create(subnet)
 
         # Audit
         self._log_audit("subnet", created.id, "created", {
-            "name": name, "cidr": cidr, "gateway": gateway,
+            "name": name, "cidr": cidr, "gateway": gateway, "parent_id": parent_id
         })
 
         return created
@@ -183,6 +209,8 @@ class SubnetService:
         gateway: str | None = None,
         vlan_id: int | None = None,
         description: str | None = None,
+        parent_id: int | None = None,
+        tags: dict | None = None,
     ) -> Subnet:
         """
         Update subnet metadata.
@@ -207,6 +235,24 @@ class SubnetService:
             update_data["vlan_id"] = vlan_id
         if description is not None:
             update_data["description"] = description
+        if tags is not None:
+            update_data["tags"] = tags
+        
+        # Parent validation
+        if parent_id is not None:
+            if parent_id == subnet_id:
+                raise SubnetValidationError("A subnet cannot be its own parent")
+            parent = self.get_subnet(parent_id)
+            if not is_subnet_of(subnet.cidr, parent.cidr):
+                raise SubnetValidationError(
+                    f"Subnet {subnet.cidr} is not strictly contained within new parent {parent.cidr}"
+                )
+            # Cannot change parent if it causes new overlap conflicts with siblings
+            # Wait, moving a subnet to a new parent doesn't change its CIDR, so overlaps won't change
+            # UNLESS it was previously overlapping with the new parent's OTHER children!
+            # But it couldn't have been, because we enforced overlaps on creation.
+            # So just assigning parent_id is safe as long as containment is valid.
+            update_data["parent_id"] = parent_id
 
         if not update_data:
             return subnet
@@ -246,3 +292,87 @@ class SubnetService:
         )
         self._db.add(log)
         self._db.commit()
+
+    # ── Bulk Operations ──────────────────────────────────────────
+
+    def export_csv(self) -> str:
+        """Export all subnets to a CSV string."""
+        subnets = self.list_subnets(limit=100000)
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Header
+        writer.writerow([
+            "id", "name", "cidr", "gateway", "vlan_id", 
+            "description", "parent_id", "tags"
+        ])
+        
+        for s in subnets:
+            tags_str = json.dumps(s.tags) if s.tags else ""
+            writer.writerow([
+                s.id, s.name, s.cidr, s.gateway or "", s.vlan_id or "",
+                s.description or "", s.parent_id or "", tags_str
+            ])
+            
+        return output.getvalue()
+
+    def bulk_import(self, csv_content: str) -> dict:
+        """
+        Import subnets from a CSV string.
+        Automatically sorts by CIDR prefixlen to ensure parents are created before children.
+        """
+        import ipaddress
+        
+        reader = csv.DictReader(io.StringIO(csv_content))
+        rows = list(reader)
+        
+        # Sort rows by CIDR size (prefixlen ascending -> larger subnets first)
+        def get_prefixlen(row):
+            try:
+                return ipaddress.IPv4Network(row.get("cidr", "").strip(), strict=False).prefixlen
+            except ValueError:
+                return 32 # Push invalid CIDRs to the end so they fail gracefully during creation
+                
+        rows.sort(key=get_prefixlen)
+        
+        created_count = 0
+        errors = []
+        
+        for idx, row in enumerate(rows):
+            name = row.get("name", "").strip()
+            cidr = row.get("cidr", "").strip()
+            if not name or not cidr:
+                errors.append(f"Row {idx+1}: Missing required 'name' or 'cidr'")
+                continue
+                
+            gateway = row.get("gateway", "").strip() or None
+            vlan_id_str = row.get("vlan_id", "").strip()
+            vlan_id = int(vlan_id_str) if vlan_id_str.isdigit() else None
+            description = row.get("description", "").strip() or None
+            parent_id_str = row.get("parent_id", "").strip()
+            parent_id = int(parent_id_str) if parent_id_str.isdigit() else None
+            
+            tags_str = row.get("tags", "").strip()
+            tags = {}
+            if tags_str:
+                try:
+                    tags = json.loads(tags_str)
+                except json.JSONDecodeError:
+                    errors.append(f"Row {idx+1} ({cidr}): Invalid JSON in 'tags'")
+                    continue
+                    
+            try:
+                self.create_subnet(
+                    name=name,
+                    cidr=cidr,
+                    gateway=gateway,
+                    vlan_id=vlan_id,
+                    description=description,
+                    parent_id=parent_id,
+                    tags=tags
+                )
+                created_count += 1
+            except (SubnetValidationError, SubnetConflictError) as e:
+                errors.append(f"Row {idx+1} ({cidr}): {str(e)}")
+                
+        return {"imported": created_count, "errors": errors}
