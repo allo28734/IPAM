@@ -18,6 +18,7 @@ import app.models  # noqa: F401
 
 # Import v1 routers
 from app.api.v1 import audit as audit_router
+from app.api.v1 import auth as auth_router
 from app.api.v1 import dashboard as dashboard_router
 from app.api.v1 import ip_addresses as ip_router
 from app.api.v1 import subnets as subnet_router
@@ -25,8 +26,8 @@ from app.api.v1 import subnets as subnet_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Create database tables on startup (MVP convenience — Alembic for prod)."""
-    Base.metadata.create_all(bind=engine)
+    """Lifespan events (e.g. startup/shutdown tasks)."""
+    # Note: Table creation is now handled exclusively via Alembic migrations.
     yield
 
 
@@ -49,6 +50,7 @@ def create_app() -> FastAPI:
 
     # Mount v1 API routers under /api/v1
     api_prefix = "/api/v1"
+    app.include_router(auth_router.router, prefix=api_prefix)
     app.include_router(subnet_router.router, prefix=api_prefix)
     app.include_router(ip_router.router, prefix=api_prefix)
     app.include_router(audit_router.router, prefix=api_prefix)

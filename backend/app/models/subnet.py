@@ -20,8 +20,9 @@ class Subnet(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    cidr: Mapped[str] = mapped_column(String(18), nullable=False, unique=True)
-    gateway: Mapped[str | None] = mapped_column(String(15), nullable=True)
+    cidr: Mapped[str] = mapped_column(String(45), nullable=False, unique=True)
+    gateway: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    ip_version: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
     vlan_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     

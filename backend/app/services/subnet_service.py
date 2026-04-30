@@ -145,7 +145,8 @@ class SubnetService:
         """
         # 1. Validate CIDR format
         try:
-            validate_cidr(cidr)
+            network = validate_cidr(cidr)
+            ip_version = network.version
         except ValueError as exc:
             raise SubnetValidationError(str(exc)) from exc
 
@@ -187,6 +188,7 @@ class SubnetService:
             name=name,
             cidr=cidr,
             gateway=gateway,
+            ip_version=ip_version,
             vlan_id=vlan_id,
             description=description,
             parent_id=parent_id,

@@ -19,8 +19,8 @@ class SubnetCreate(BaseModel):
     """Schema for creating a new subnet."""
 
     name: str = Field(..., min_length=1, max_length=255, examples=["Office LAN"])
-    cidr: str = Field(..., min_length=7, max_length=18, examples=["10.0.1.0/24"])
-    gateway: Optional[str] = Field(None, max_length=15, examples=["10.0.1.1"])
+    cidr: str = Field(..., min_length=7, max_length=45, examples=["10.0.1.0/24", "2001:db8::/32"])
+    gateway: Optional[str] = Field(None, max_length=45, examples=["10.0.1.1", "2001:db8::1"])
     vlan_id: Optional[int] = Field(None, ge=1, le=4094, examples=[100])
     description: Optional[str] = Field(None, max_length=500, examples=["Main office network"])
     parent_id: Optional[int] = Field(None, description="ID of the parent subnet for hierarchical nesting")
@@ -31,7 +31,7 @@ class SubnetUpdate(BaseModel):
     """Schema for updating subnet metadata. All fields are optional."""
 
     name: Optional[str] = Field(None, min_length=1, max_length=255)
-    gateway: Optional[str] = Field(None, max_length=15)
+    gateway: Optional[str] = Field(None, max_length=45)
     vlan_id: Optional[int] = Field(None, ge=1, le=4094)
     description: Optional[str] = Field(None, max_length=500)
     parent_id: Optional[int] = Field(None)
@@ -49,6 +49,7 @@ class SubnetResponse(BaseModel):
     id: int
     name: str
     cidr: str
+    ip_version: int
     gateway: Optional[str] = None
     vlan_id: Optional[int] = None
     description: Optional[str] = None

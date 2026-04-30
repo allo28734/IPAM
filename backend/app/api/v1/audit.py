@@ -4,15 +4,19 @@ Audit Log API router — Presentation Layer.
 Read-only router for querying the audit trail.
 """
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import DbSession
+from app.api.deps import DbSession, get_current_user
 from app.models.audit_log import AuditLog
 from app.schemas.audit_log import AuditLogListResponse, AuditLogResponse
 
 from sqlalchemy import select, func
 
-router = APIRouter(prefix="/audit", tags=["audit"])
+router = APIRouter(
+    prefix="/audit",
+    tags=["audit"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.get("", response_model=AuditLogListResponse)

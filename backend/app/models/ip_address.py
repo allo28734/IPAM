@@ -23,7 +23,8 @@ class IPAddress(Base):
     subnet_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("subnets.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    address: Mapped[str] = mapped_column(String(15), nullable=False, unique=True)
+    address: Mapped[str] = mapped_column(String(45), nullable=False, unique=True)
+    ip_version: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="available"
     )

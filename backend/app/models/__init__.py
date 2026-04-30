@@ -8,5 +8,6 @@ but contain NO business logic or HTTP awareness.
 from app.models.audit_log import AuditLog
 from app.models.ip_address import IPAddress
 from app.models.subnet import Subnet
+from app.models.user import User
 
-__all__ = ["Subnet", "IPAddress", "AuditLog"]
+__all__ = ["Subnet", "IPAddress", "AuditLog", "User"]

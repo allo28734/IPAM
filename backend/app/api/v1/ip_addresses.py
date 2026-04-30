@@ -5,9 +5,9 @@ Thin router for IP address CRUD and allocation operations.
 Delegates all business logic to IPAddressService.
 """
 
-from fastapi import APIRouter, HTTPException, Query, status, UploadFile, File, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Response
 
-from app.api.deps import IPServiceDep, SubnetServiceDep
+from app.api.deps import IPServiceDep, SubnetServiceDep, get_current_user
 from app.schemas.ip_address import (
     IPAddressAllocate,
     IPAddressCreate,
@@ -23,7 +23,10 @@ from app.services.ip_address_service import (
     SubnetNotFoundError,
 )
 
-router = APIRouter(tags=["ip-addresses"])
+router = APIRouter(
+    tags=["ip-addresses"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 # ── List IPs in a subnet ───────────────────────────────────────

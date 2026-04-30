@@ -4,12 +4,16 @@ Dashboard API router — Presentation Layer.
 Provides aggregate statistics for the IPAM dashboard.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from app.api.deps import IPServiceDep, SubnetServiceDep
+from app.api.deps import IPServiceDep, SubnetServiceDep, get_current_user
 from app.schemas.subnet import DashboardStats
 
-router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+router = APIRouter(
+    prefix="/dashboard",
+    tags=["dashboard"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.get("/stats", response_model=DashboardStats)

@@ -154,9 +154,17 @@ class IPAddressService:
 
         # Validate IP format
         try:
-            validate_ip_address(address)
+            ip_obj = validate_ip_address(address)
+            ip_version = ip_obj.version
         except ValueError as exc:
             raise IPValidationError(str(exc)) from exc
+
+        # Enforce IP version matches subnet
+        if ip_version != subnet.ip_version:
+            raise IPValidationError(
+                f"IP version mismatch: Subnet {subnet.cidr} is IPv{subnet.ip_version}, "
+                f"but address {address} is IPv{ip_version}"
+            )
 
         # Validate IP is within subnet
         if not is_ip_in_subnet(address, subnet.cidr):
@@ -176,6 +184,7 @@ class IPAddressService:
         ip = IPAddress(
             subnet_id=subnet_id,
             address=address,
+            ip_version=ip_version,
             status=status,
             hostname=hostname,
             description=description,
@@ -227,6 +236,7 @@ class IPAddressService:
         ip = IPAddress(
             subnet_id=subnet_id,
             address=address,
+            ip_version=subnet.ip_version,
             status=status,
             hostname=hostname,
             description=description,

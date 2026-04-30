@@ -50,10 +50,10 @@ class TestValidateCidr:
         with pytest.raises(ValueError):
             validate_cidr("")
 
-    def test_invalid_cidr_ipv6(self):
-        """IPv6 must be rejected in our IPv4-only MVP."""
-        with pytest.raises(ValueError):
-            validate_cidr("2001:db8::/32")
+    def test_valid_cidr_ipv6(self):
+        """IPv6 must be accepted."""
+        net = validate_cidr("2001:db8::/32")
+        assert str(net) == "2001:db8::/32"
 
 
 class TestValidateIpAddress:
@@ -64,7 +64,7 @@ class TestValidateIpAddress:
         assert str(addr) == "10.0.1.42"
 
     def test_invalid_ip(self):
-        with pytest.raises(ValueError, match="Invalid IPv4"):
+        with pytest.raises(ValueError, match="Invalid IP address"):
             validate_ip_address("999.999.999.999")
 
     def test_invalid_ip_string(self):
@@ -216,3 +216,20 @@ class TestCalculateUtilization:
     def test_one_address_in_slash_30(self):
         result = calculate_utilization(1, "10.0.1.0/30")
         assert result == 50.0
+
+class TestIPv6Math:
+    """Tests for IPv6 mathematical calculations without memory exhaustion."""
+
+    def test_get_usable_host_range_ipv6(self):
+        first, last, count = get_usable_host_range("2001:db8::/64")
+        assert first == "2001:db8::1"
+        assert last == "2001:db8::ffff:ffff:ffff:ffff"
+        assert count == (2**64) - 1
+
+    def test_get_subnet_capacity_ipv6(self):
+        assert get_subnet_capacity("2001:db8::/64") == (2**64) - 1
+
+    def test_next_available_ip_ipv6(self):
+        used = ["2001:db8::1", "2001:db8::2"]
+        result = next_available_ip("2001:db8::/64", used)
+        assert result == "2001:db8::3"

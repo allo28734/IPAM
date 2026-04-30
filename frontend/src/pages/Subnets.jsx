@@ -158,7 +158,10 @@ const Subnets = () => {
               {subnet.name}
             </div>
           </td>
-          <td><span className="badge badge-info">{subnet.cidr}</span></td>
+          <td>
+            <span className="badge badge-info" style={{ marginRight: '8px' }}>IPv{subnet.ip_version}</span>
+            <span className="badge badge-info">{subnet.cidr}</span>
+          </td>
           <td>{subnet.gateway || '-'}</td>
           <td>{subnet.vlan_id || '-'}</td>
           <td>

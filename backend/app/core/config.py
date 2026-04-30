@@ -23,14 +23,22 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     debug: bool = True
 
-    # Database — SQLite for MVP (file-based, zero-config)
-    database_url: str = "sqlite:///./ipam.db"
+    # Database — PostgreSQL via Docker (see docker-compose.yml)
+    database_url: str = "postgresql://ipam:ipam_secret@localhost:5432/ipam"
 
     # CORS — permissive for local development
     cors_origins: list[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]
+
+    # JWT / Auth
+    jwt_secret_key: str = "CHANGE-ME-in-production-use-a-real-secret"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 60
+
+    # Redis / Celery
+    redis_url: str = "redis://localhost:6379/0"
 
 
 # Singleton instance used across the application

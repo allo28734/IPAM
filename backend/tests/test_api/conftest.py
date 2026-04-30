@@ -47,7 +47,14 @@ def test_client():
         finally:
             session.close()
 
+    from app.api.deps import get_current_user
+    from app.models.user import User
+
+    def override_get_current_user():
+        return User(id=1, username="testadmin", role="admin")
+
     fastapi_app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[get_current_user] = override_get_current_user
 
     with TestClient(fastapi_app) as client:
         yield client

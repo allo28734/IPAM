@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class IPAddressCreate(BaseModel):
     """Schema for assigning/reserving a specific IP address."""
 
-    address: str = Field(..., min_length=7, max_length=15, examples=["10.0.1.10"])
+    address: str = Field(..., min_length=7, max_length=45, examples=["10.0.1.10", "2001:db8::1"])
     status: str = Field("assigned", examples=["assigned", "reserved"])
     hostname: Optional[str] = Field(None, max_length=255, examples=["web-server-01"])
     description: Optional[str] = Field(None, max_length=500, examples=["Production web server"])
@@ -50,6 +50,7 @@ class IPAddressResponse(BaseModel):
     id: int
     subnet_id: int
     address: str
+    ip_version: int
     status: str
     hostname: Optional[str] = None
     description: Optional[str] = None

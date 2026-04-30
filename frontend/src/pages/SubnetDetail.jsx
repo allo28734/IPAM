@@ -11,6 +11,8 @@ const SubnetDetail = () => {
   const [utilization, setUtilization] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sweeping, setSweeping] = useState(false);
+  const [sweepTaskId, setSweepTaskId] = useState(null);
+  const [sweepStatus, setSweepStatus] = useState(null);
   const [error, setError] = useState(null);
   
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
@@ -23,6 +25,12 @@ const SubnetDetail = () => {
   const [importFile, setImportFile] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
+
+  const formatLargeNumber = (num) => {
+    if (num === null || num === undefined) return '';
+    if (num > 1e15) return num.toExponential(2);
+    return num.toLocaleString();
+  };
   
   const fetchData = async () => {
     try {
@@ -46,6 +54,46 @@ const SubnetDetail = () => {
   useEffect(() => {
     fetchData();
   }, [id]);
+
+  useEffect(() => {
+    let intervalId;
+    
+    const checkStatus = async () => {
+      if (!sweepTaskId) return;
+      try {
+        const res = await api.get(`/subnets/sweep/status/${sweepTaskId}`);
+        setSweepStatus(res.data.status);
+        
+        if (res.data.status === 'SUCCESS') {
+          setSweeping(false);
+          setSweepTaskId(null);
+          clearInterval(intervalId);
+          const result = res.data.result;
+          if (result && !result.error) {
+             alert(`Sweep completed! ${result.updated_count} IPs updated, ${result.conflict_count} new conflicts found.`);
+          } else {
+             alert(`Sweep completed with error: ${result?.error || 'Unknown error'}`);
+          }
+          fetchData();
+        } else if (res.data.status === 'FAILURE') {
+          setSweeping(false);
+          setSweepTaskId(null);
+          clearInterval(intervalId);
+          alert('Sweep task failed.');
+        }
+      } catch (err) {
+        console.error("Failed to fetch sweep status", err);
+      }
+    };
+
+    if (sweeping && sweepTaskId) {
+      intervalId = setInterval(checkStatus, 2000);
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [sweeping, sweepTaskId]);
 
   const handleAutoAllocate = async () => {
     try {
@@ -136,12 +184,14 @@ const SubnetDetail = () => {
   const handleSweep = async () => {
     try {
       setSweeping(true);
-      await api.post(`/subnets/${id}/sweep`);
-      alert("Sweep initiated in the background. Refresh the page in a few moments to see updates.");
+      setSweepStatus('PENDING');
+      const response = await api.post(`/subnets/${id}/sweep`);
+      setSweepTaskId(response.data.task_id);
     } catch (err) {
       alert(err.response?.data?.detail || 'Failed to initiate sweep.');
-    } finally {
       setSweeping(false);
+      setSweepStatus(null);
+      setSweepTaskId(null);
     }
   };
 
@@ -157,6 +207,7 @@ const SubnetDetail = () => {
             <ArrowLeft size={16} />
           </button>
           <h1 className="page-title">{subnet.name}</h1>
+          <span className="badge badge-info" style={{ marginRight: '8px' }}>IPv{subnet.ip_version}</span>
           <span className="badge badge-info">{subnet.cidr}</span>
         </div>
         <div className="header-actions">
@@ -167,7 +218,7 @@ const SubnetDetail = () => {
             <Upload size={16} /> Import CSV
           </button>
           <button className="btn btn-secondary" onClick={handleSweep} disabled={sweeping}>
-            <Activity size={16} className={sweeping ? 'animate-pulse' : ''} /> {sweeping ? 'Sweeping...' : 'Sweep Subnet'}
+            <Activity size={16} className={sweeping ? 'animate-pulse' : ''} /> {sweeping ? `Sweeping... (${sweepStatus || 'Starting'})` : 'Sweep Subnet'}
           </button>
           <button className="btn btn-secondary" onClick={handleAutoAllocate}>
             <Settings size={16} /> Auto-Allocate Next IP
@@ -181,12 +232,12 @@ const SubnetDetail = () => {
       <div className="stats-grid" style={{ marginBottom: '24px' }}>
         <div className="glass-card stat-card">
           <span className="stat-title">Capacity</span>
-          <div className="stat-value">{utilization?.total_capacity}</div>
+          <div className="stat-value">{formatLargeNumber(utilization?.total_capacity)}</div>
           <span className="stat-desc">Total usable IPs</span>
         </div>
         <div className="glass-card stat-card">
           <span className="stat-title">Available</span>
-          <div className="stat-value" style={{ color: 'var(--success)' }}>{utilization?.available_count}</div>
+          <div className="stat-value" style={{ color: 'var(--success)' }}>{formatLargeNumber(utilization?.available_count)}</div>
           <span className="stat-desc">Free to allocate</span>
         </div>
         <div className="glass-card stat-card">

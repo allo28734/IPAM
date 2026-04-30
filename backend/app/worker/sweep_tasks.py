@@ -1,35 +1,41 @@
 """
-Sweep service — Background tasks for network verification.
+Sweep background tasks — Worker logic.
+
+This module contains the Celery task for performing ICMP ping sweeps.
+Since Celery workers run in separate processes, each task must manage
+its own database sessions using `SessionLocal()`.
 """
 
 import logging
+import asyncio
 from datetime import datetime, timezone
 
+from celery import shared_task
+from app.core.celery_app import celery_app
 from app.core.database import SessionLocal
 from app.models.ip_address import IPAddress
 from app.models.subnet import Subnet
-from app.repositories.ip_address_repo import IPAddressRepository
-from app.repositories.subnet_repo import SubnetRepository
 from app.services.ip_address_service import IPAddressService
 from app.utils.ip_utils import get_usable_host_range
 from app.utils.ping_utils import ping_sweep
 
 logger = logging.getLogger(__name__)
 
-async def run_subnet_sweep(subnet_id: int):
+@celery_app.task(bind=True)
+def run_subnet_sweep(self, subnet_id: int):
     """
-    Background task to ping sweep a specific subnet.
+    Background Celery task to ping sweep a specific subnet.
     """
     db = SessionLocal()
     try:
         subnet = db.query(Subnet).filter(Subnet.id == subnet_id).first()
         if not subnet:
             logger.error(f"Sweep failed: Subnet {subnet_id} not found.")
-            return
+            return {"error": "Subnet not found"}
 
         usable_ips = get_usable_host_range(subnet.cidr)
         if not usable_ips:
-            return
+            return {"error": "No usable IPs in subnet"}
 
         # Sanity check limit (though API route should have enforced this)
         if len(usable_ips) > 2048:
@@ -37,7 +43,9 @@ async def run_subnet_sweep(subnet_id: int):
             usable_ips = usable_ips[:2048]
 
         logger.info(f"Starting ICMP sweep of {len(usable_ips)} IPs in subnet {subnet.name} ({subnet.cidr})")
-        results = await ping_sweep(usable_ips, max_concurrency=50)
+        
+        # Celery tasks are synchronous by default. We run the async ping_sweep using asyncio.run
+        results = asyncio.run(ping_sweep(usable_ips, max_concurrency=50))
 
         # Build service for auditing and creating IPs
         ip_service = IPAddressService(db)
@@ -75,8 +83,16 @@ async def run_subnet_sweep(subnet_id: int):
 
         db.commit()
         logger.info(f"Sweep completed for {subnet.cidr}: {updated_count} IPs updated, {conflict_count} new conflicts found.")
+        
+        return {
+            "subnet": subnet.cidr,
+            "ips_swept": len(usable_ips),
+            "updated_count": updated_count,
+            "conflict_count": conflict_count
+        }
 
     except Exception as e:
         logger.error(f"Sweep failed for subnet {subnet_id}: {e}")
+        return {"error": str(e)}
     finally:
         db.close()

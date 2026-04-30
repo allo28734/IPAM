@@ -9,41 +9,46 @@ All functions in this module are easily unit-testable in isolation.
 """
 
 import ipaddress
-from typing import Optional
+from typing import Optional, Union
 
 
-def validate_cidr(cidr: str) -> ipaddress.IPv4Network:
+def validate_cidr(cidr: str) -> Union[ipaddress.IPv4Network, ipaddress.IPv6Network]:
     """
-    Parse and validate a CIDR string (e.g. '10.0.1.0/24').
+    Parse and validate a CIDR string (e.g. '10.0.1.0/24' or '2001:db8::/32').
 
-    Returns the normalized IPv4Network object on success.
+    Returns the normalized IPv4Network or IPv6Network object on success.
     Raises ValueError with a descriptive message on failure.
     """
     try:
-        network = ipaddress.IPv4Network(cidr, strict=True)
+        network = ipaddress.ip_network(cidr, strict=True)
     except ValueError as exc:
         raise ValueError(f"Invalid CIDR notation '{cidr}': {exc}") from exc
 
     return network
 
 
-def validate_ip_address(address: str) -> ipaddress.IPv4Address:
+def validate_ip_address(address: str) -> Union[ipaddress.IPv4Address, ipaddress.IPv6Address]:
     """
-    Parse and validate an IPv4 address string.
+    Parse and validate an IPv4 or IPv6 address string.
 
-    Raises ValueError if the string is not a valid IPv4 address.
+    Raises ValueError if the string is not a valid IP address.
     """
     try:
-        return ipaddress.IPv4Address(address)
+        return ipaddress.ip_address(address)
     except ValueError as exc:
-        raise ValueError(f"Invalid IPv4 address '{address}': {exc}") from exc
+        raise ValueError(f"Invalid IP address '{address}': {exc}") from exc
 
 
 def is_ip_in_subnet(address: str, cidr: str) -> bool:
     """Check whether an IP address belongs to a given CIDR subnet."""
-    ip = ipaddress.IPv4Address(address)
-    network = ipaddress.IPv4Network(cidr, strict=False)
-    return ip in network
+    try:
+        ip = ipaddress.ip_address(address)
+        network = ipaddress.ip_network(cidr, strict=False)
+        if ip.version != network.version:
+            return False
+        return ip in network
+    except ValueError:
+        return False
 
 
 def subnets_overlap(cidr_a: str, cidr_b: str) -> bool:
@@ -52,18 +57,28 @@ def subnets_overlap(cidr_a: str, cidr_b: str) -> bool:
 
     Two subnets overlap if any IP address is contained in both.
     """
-    net_a = ipaddress.IPv4Network(cidr_a, strict=False)
-    net_b = ipaddress.IPv4Network(cidr_b, strict=False)
-    return net_a.overlaps(net_b)
+    try:
+        net_a = ipaddress.ip_network(cidr_a, strict=False)
+        net_b = ipaddress.ip_network(cidr_b, strict=False)
+        if net_a.version != net_b.version:
+            return False
+        return net_a.overlaps(net_b)
+    except ValueError:
+        return False
 
 
 def is_subnet_of(child_cidr: str, parent_cidr: str) -> bool:
     """
     Determine whether child_cidr is strictly a subnet of parent_cidr.
     """
-    child_net = ipaddress.IPv4Network(child_cidr, strict=False)
-    parent_net = ipaddress.IPv4Network(parent_cidr, strict=False)
-    return child_net.subnet_of(parent_net)
+    try:
+        child_net = ipaddress.ip_network(child_cidr, strict=False)
+        parent_net = ipaddress.ip_network(parent_cidr, strict=False)
+        if child_net.version != parent_net.version:
+            return False
+        return child_net.subnet_of(parent_net)
+    except ValueError:
+        return False
 
 
 def find_overlapping_cidrs(new_cidr: str, existing_cidrs: list[str]) -> list[str]:
@@ -73,30 +88,39 @@ def find_overlapping_cidrs(new_cidr: str, existing_cidrs: list[str]) -> list[str
     Returns an empty list if there are no overlaps.
     """
     overlaps = []
-    new_net = ipaddress.IPv4Network(new_cidr, strict=False)
+    new_net = ipaddress.ip_network(new_cidr, strict=False)
     for cidr in existing_cidrs:
-        existing_net = ipaddress.IPv4Network(cidr, strict=False)
-        if new_net.overlaps(existing_net):
+        existing_net = ipaddress.ip_network(cidr, strict=False)
+        if new_net.version == existing_net.version and new_net.overlaps(existing_net):
             overlaps.append(cidr)
     return overlaps
 
 
 def get_usable_host_range(cidr: str) -> tuple[str, str, int]:
     """
-    Compute the usable host range for a subnet.
+    Compute the usable host range for a subnet without expanding it in memory.
 
     Returns (first_usable_ip, last_usable_ip, total_usable_count).
-    For /31 and /32 subnets, special RFC rules apply.
     """
-    network = ipaddress.IPv4Network(cidr, strict=False)
-    hosts = list(network.hosts())
-
-    if not hosts:
-        # /32 — single host
-        addr = str(network.network_address)
-        return (addr, addr, 1)
-
-    return (str(hosts[0]), str(hosts[-1]), len(hosts))
+    network = ipaddress.ip_network(cidr, strict=False)
+    
+    if network.version == 4:
+        if network.prefixlen == 32:
+            addr = str(network.network_address)
+            return (addr, addr, 1)
+        elif network.prefixlen == 31:
+            return (str(network[0]), str(network[1]), 2)
+        else:
+            return (str(network[1]), str(network[-2]), network.num_addresses - 2)
+    else:
+        # IPv6
+        if network.prefixlen == 128:
+            addr = str(network.network_address)
+            return (addr, addr, 1)
+        else:
+            # First is Subnet-Router anycast (usually skipped for hosts) -> network[1]
+            # Last is network[-1]
+            return (str(network[1]), str(network[-1]), network.num_addresses - 1)
 
 
 def next_available_ip(
@@ -105,42 +129,64 @@ def next_available_ip(
     gateway: Optional[str] = None,
 ) -> Optional[str]:
     """
-    Find the next available IP address in a subnet.
-
-    Iterates through usable host addresses and returns the first one
-    that is not in the used_addresses set and is not the gateway.
-    Returns None if the subnet is fully utilized.
+    Find the next available IP address in a subnet efficiently.
     """
-    network = ipaddress.IPv4Network(cidr, strict=False)
+    network = ipaddress.ip_network(cidr, strict=False)
     used_set = set(used_addresses)
 
     if gateway:
         used_set.add(gateway)
 
-    for host in network.hosts():
-        addr = str(host)
-        if addr not in used_set:
-            return addr
-
+    # Convert used IPs back to ipaddress objects for exact string matching/integer conversion
+    # However, just iterating over integers and casting to IP is faster
+    used_ints = {int(ipaddress.ip_address(ip)) for ip in used_set if ipaddress.ip_address(ip).version == network.version}
+    
+    if network.version == 4:
+        if network.prefixlen == 32:
+            start_int = int(network.network_address)
+            end_int = int(network.network_address)
+        elif network.prefixlen == 31:
+            start_int = int(network.network_address)
+            end_int = int(network.network_address) + 1
+        else:
+            start_int = int(network.network_address) + 1
+            end_int = int(network.broadcast_address) - 1
+    else:
+        if network.prefixlen == 128:
+            start_int = int(network.network_address)
+            end_int = int(network.network_address)
+        else:
+            start_int = int(network.network_address) + 1
+            end_int = int(network.network_address) + network.num_addresses - 1
+            
+    # Iterate mathematically without creating a massive list in memory
+    curr = start_int
+    while curr <= end_int:
+        if curr not in used_ints:
+            return str(ipaddress.ip_address(curr))
+        curr += 1
+        
     return None
 
 
 def get_subnet_capacity(cidr: str) -> int:
     """
     Return the total number of usable host addresses in a subnet.
-
-    Excludes network and broadcast addresses (except for /31 and /32).
     """
-    network = ipaddress.IPv4Network(cidr, strict=False)
-    hosts = list(network.hosts())
-    return len(hosts) if hosts else 1
+    network = ipaddress.ip_network(cidr, strict=False)
+    if network.version == 4:
+        if network.prefixlen >= 31:
+            return network.num_addresses
+        return network.num_addresses - 2
+    else:
+        if network.prefixlen == 128:
+            return 1
+        return network.num_addresses - 1
 
 
 def calculate_utilization(used_count: int, cidr: str) -> float:
     """
     Calculate subnet utilization as a percentage.
-
-    Returns a float between 0.0 and 100.0.
     """
     capacity = get_subnet_capacity(cidr)
     if capacity == 0:

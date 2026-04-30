@@ -10,11 +10,13 @@ Thin router that handles HTTP concerns only:
 This router contains ZERO business logic or direct database access.
 """
 
-from fastapi import APIRouter, HTTPException, Query, status, UploadFile, File, Response, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Response
 import ipaddress
-from app.services.sweep_service import run_subnet_sweep
+from celery.result import AsyncResult
+from app.core.celery_app import celery_app
+from app.worker.sweep_tasks import run_subnet_sweep
 
-from app.api.deps import IPServiceDep, SubnetServiceDep
+from app.api.deps import IPServiceDep, SubnetServiceDep, get_current_user
 from app.schemas.ip_address import IPAddressResponse
 from app.schemas.subnet import (
     DashboardStats,
@@ -30,7 +32,11 @@ from app.services.subnet_service import (
     SubnetValidationError,
 )
 
-router = APIRouter(prefix="/subnets", tags=["subnets"])
+router = APIRouter(
+    prefix="/subnets",
+    tags=["subnets"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 # ── List subnets ────────────────────────────────────────────────
@@ -174,8 +180,8 @@ def get_utilization(subnet_id: int, service: SubnetServiceDep):
 
 
 @router.post("/{subnet_id}/sweep")
-async def sweep_subnet_endpoint(subnet_id: int, service: SubnetServiceDep, background_tasks: BackgroundTasks):
-    """Trigger a background ICMP ping sweep for a subnet."""
+async def sweep_subnet_endpoint(subnet_id: int, service: SubnetServiceDep):
+    """Trigger a background ICMP ping sweep for a subnet using Celery."""
     try:
         subnet = service.get_subnet(subnet_id)
     except SubnetNotFoundError as exc:
@@ -188,5 +194,16 @@ async def sweep_subnet_endpoint(subnet_id: int, service: SubnetServiceDep, backg
             detail="Subnet too large for manual sweep. Please limit to /21 or smaller."
         )
         
-    background_tasks.add_task(run_subnet_sweep, subnet_id)
-    return {"message": "Sweep initiated in the background"}
+    task = run_subnet_sweep.delay(subnet_id)
+    return {"task_id": task.id, "message": "Sweep initiated in the background"}
+
+
+@router.get("/sweep/status/{task_id}")
+def get_sweep_status(task_id: str):
+    """Check the status of a background ICMP sweep Celery task."""
+    result = AsyncResult(task_id, app=celery_app)
+    return {
+        "task_id": task_id,
+        "status": result.state,
+        "result": result.result if result.ready() else None
+    }

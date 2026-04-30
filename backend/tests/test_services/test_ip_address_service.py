@@ -46,7 +46,7 @@ class TestIPServiceAssign:
 
     def test_reject_invalid_ip_format(self, db, subnet):
         svc = IPAddressService(db)
-        with pytest.raises(IPValidationError, match="Invalid IPv4"):
+        with pytest.raises(IPValidationError, match="Invalid IP address"):
             svc.assign_ip(subnet.id, address="not-an-ip")
 
     def test_reject_ip_outside_subnet(self, db, subnet):
