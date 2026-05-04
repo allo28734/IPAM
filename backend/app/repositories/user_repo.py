@@ -5,7 +5,7 @@ Extends BaseRepository with user-specific lookups such as
 find-by-username and find-by-email. Contains NO business logic.
 """
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.models.user import User
@@ -27,3 +27,8 @@ class UserRepository(BaseRepository[User]):
         """Find a user by their exact email address."""
         stmt = select(User).where(User.email == email)
         return self._db.scalars(stmt).first()
+
+    def count_users(self) -> int:
+        """Return the total number of users in the database."""
+        stmt = select(func.count()).select_from(User)
+        return self._db.scalar(stmt) or 0

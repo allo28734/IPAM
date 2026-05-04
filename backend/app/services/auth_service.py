@@ -87,3 +87,8 @@ def authenticate_user(
     if not verify_password(password, user.hashed_password):
         return None
     return user
+
+def is_setup_required(db: Session) -> bool:
+    """Check if the system requires first-run setup (0 users)."""
+    repo = UserRepository(db)
+    return repo.count_users() == 0

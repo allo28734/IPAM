@@ -16,9 +16,22 @@ from app.api.deps import CurrentAdmin, CurrentUser, DbSession
 from app.models.user import User
 from app.repositories.user_repo import UserRepository
 from app.schemas.user import Token, UserCreate, UserResponse
-from app.services.auth_service import authenticate_user, create_access_token, hash_password
+from app.services.auth_service import authenticate_user, create_access_token, hash_password, is_setup_required
+from fastapi.security import OAuth2PasswordBearer
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
+
+
+
+# ── Setup / Status ─────────────────────────────────────────────
+
+
+@router.get("/setup-status")
+def get_setup_status(db: DbSession):
+    """Check if the system requires first-run setup."""
+    return {"needs_setup": is_setup_required(db)}
 
 
 # ── Login / Token ──────────────────────────────────────────────
@@ -65,14 +78,30 @@ def read_current_user(current_user: CurrentUser):
 def register_user(
     body: UserCreate,
     db: DbSession,
-    admin: CurrentAdmin = None,
+    token: str | None = Depends(optional_oauth2_scheme),
 ):
     """
     Create a new user account.
 
-    Restricted to admin users. Use the CLI bootstrap script
-    (backend/scripts/create_admin.py) to create the initial admin.
+    Allows registration without an admin JWT ONLY IF the system requires setup.
+    Otherwise, a valid admin JWT is required.
     """
+    if not is_setup_required(db):
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Setup already complete. Admin privileges required.",
+            )
+        from app.api.deps import get_current_user, get_current_active_admin
+        try:
+            user = get_current_user(token, db)
+            get_current_active_admin(user)
+        except HTTPException:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin privileges required",
+            )
+
     repo = UserRepository(db)
 
     # Check for existing username

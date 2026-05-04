@@ -1,6 +1,53 @@
 version: "3.9"
 
 services:
+  # ── Frontend (Vite/React + Nginx) ────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ipam_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+  # ── Backend (FastAPI) ────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ipam_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      - DATABASE_URL=postgresql://ipam:ipam_secret@db:5432/ipam
+      - REDIS_URL=redis://redis:6379/0
+
+  # ── Celery Worker ────────────────────────────────────────────
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ipam_celery_worker
+    restart: unless-stopped
+    command: ["celery", "-A", "app.core.celery_app", "worker", "--loglevel=info"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      - DATABASE_URL=postgresql://ipam:ipam_secret@db:5432/ipam
+      - REDIS_URL=redis://redis:6379/0
+
   # ── PostgreSQL 15 ────────────────────────────────────────────
   db:
     image: postgres:15-alpine
