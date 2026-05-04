@@ -5,24 +5,45 @@ Thin router for authentication endpoints:
   - Token generation (login)
   - Current user info
   - User registration (admin-only)
+  - SSO / OIDC login (optional)
 
 This router contains ZERO business logic or direct database access.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.api.deps import CurrentAdmin, CurrentUser, DbSession
+from app.core.config import settings
 from app.models.user import User
 from app.repositories.user_repo import UserRepository
 from app.schemas.user import Token, UserCreate, UserResponse
-from app.services.auth_service import authenticate_user, create_access_token, hash_password, is_setup_required
+from app.services.auth_service import (
+    authenticate_user,
+    create_access_token,
+    handle_sso_login,
+    hash_password,
+    is_setup_required,
+)
 from fastapi.security import OAuth2PasswordBearer
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
 
+
+def _sso_is_configured() -> bool:
+    """Return True only when all required SSO settings are present."""
+    return bool(
+        settings.sso_client_id
+        and settings.sso_client_secret
+        and settings.sso_discovery_url
+    )
 
 
 # ── Setup / Status ─────────────────────────────────────────────
@@ -126,3 +147,101 @@ def register_user(
     )
     created = repo.create(user)
     return UserResponse.model_validate(created)
+
+
+# ── SSO / OIDC ─────────────────────────────────────────────────
+
+
+@router.get("/sso/enabled")
+def sso_enabled():
+    """Public endpoint — tells the frontend whether SSO is configured."""
+    return {"sso_enabled": _sso_is_configured()}
+
+
+@router.get("/sso/login")
+async def sso_login(request: Request):
+    """
+    Initialize the OIDC login flow.
+
+    Fetches provider metadata from the Discovery URL, builds an
+    authorization redirect, and sends the browser to the IdP.
+    """
+    if not _sso_is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="SSO is not configured",
+        )
+
+    from authlib.integrations.starlette_client import OAuth
+
+    oauth = OAuth()
+    oauth.register(
+        name="sso",
+        client_id=settings.sso_client_id,
+        client_secret=settings.sso_client_secret,
+        server_metadata_url=settings.sso_discovery_url,
+        client_kwargs={"scope": "openid email profile"},
+    )
+
+    redirect_uri = str(request.url_for("sso_callback"))
+    return await oauth.sso.authorize_redirect(request, redirect_uri)
+
+
+@router.get("/sso/callback")
+async def sso_callback(request: Request, db: DbSession):
+    """
+    Handle the OIDC callback from the Identity Provider.
+
+    Exchanges the authorization code for tokens, extracts user
+    claims, provisions/updates the local user via the service
+    layer, and returns a 302 redirect to the frontend with the
+    JWT in the query string.
+    """
+    if not _sso_is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="SSO is not configured",
+        )
+
+    from authlib.integrations.starlette_client import OAuth
+
+    oauth = OAuth()
+    oauth.register(
+        name="sso",
+        client_id=settings.sso_client_id,
+        client_secret=settings.sso_client_secret,
+        server_metadata_url=settings.sso_discovery_url,
+        client_kwargs={"scope": "openid email profile"},
+    )
+
+    try:
+        token_data = await oauth.sso.authorize_access_token(request)
+    except Exception as exc:
+        logger.error("SSO token exchange failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="SSO authentication failed",
+        )
+
+    # Extract claims from the ID token
+    userinfo = token_data.get("userinfo", {})
+    email = userinfo.get("email", "")
+    username = userinfo.get("preferred_username") or userinfo.get("name") or email.split("@")[0]
+    user_groups = userinfo.get("groups", []) or userinfo.get("roles", [])
+
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SSO provider did not return an email address",
+        )
+
+    # Delegate to service layer (business logic)
+    user = handle_sso_login(db, email, username, user_groups)
+
+    # Issue a local IPAM JWT — same as local login
+    access_token = create_access_token(data={"sub": user.username})
+
+    # 302 redirect to the frontend SSOSuccess page with the token
+    frontend_url = f"/sso-success?token={access_token}"
+    return RedirectResponse(url=frontend_url, status_code=302)
+

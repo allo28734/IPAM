@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
 from app.core.config import settings
 from app.core.database import Base, engine
@@ -38,6 +39,9 @@ def create_app() -> FastAPI:
         version=settings.app_version,
         lifespan=lifespan,
     )
+
+    # Session middleware — required by authlib for OIDC state storage
+    app.add_middleware(SessionMiddleware, secret_key=settings.jwt_secret_key)
 
     # CORS — allow the React dev server to call the API
     app.add_middleware(

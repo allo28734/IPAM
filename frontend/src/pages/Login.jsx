@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/axios';
 import './Login.css';
@@ -9,6 +9,14 @@ function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [ssoEnabled, setSsoEnabled] = useState(false);
+
+  // Check if SSO is configured on mount
+  useEffect(() => {
+    api.get('/auth/sso/enabled')
+      .then((res) => setSsoEnabled(res.data.sso_enabled))
+      .catch(() => setSsoEnabled(false));
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -36,6 +44,11 @@ function Login() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSSOLogin = () => {
+    // Redirect the entire browser to the backend SSO login endpoint
+    window.location.href = `${api.defaults.baseURL}/auth/sso/login`;
   };
 
   return (
@@ -121,6 +134,28 @@ function Login() {
               'Sign In'
             )}
           </button>
+
+          {ssoEnabled && (
+            <>
+              <div className="login-divider">
+                <span>OR</span>
+              </div>
+
+              <button
+                type="button"
+                id="sso-login-btn"
+                className="btn sso-btn"
+                onClick={handleSSOLogin}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                  <polyline points="10 17 15 12 10 7" />
+                  <line x1="15" y1="12" x2="3" y2="12" />
+                </svg>
+                Sign in with Corporate SSO
+              </button>
+            </>
+          )}
         </form>
 
         <div className="login-footer">
@@ -132,3 +167,4 @@ function Login() {
 }
 
 export default Login;
+

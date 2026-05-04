@@ -9,6 +9,7 @@ import Subnets from './pages/Subnets';
 import SubnetDetail from './pages/SubnetDetail';
 import AuditLog from './pages/AuditLog';
 import SetupWizard from './pages/SetupWizard';
+import SSOSuccess from './pages/SSOSuccess';
 
 function SetupCheck({ children }) {
   const [checking, setChecking] = useState(true);
@@ -53,6 +54,7 @@ function App() {
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/setup" element={<SetupWizard />} />
+          <Route path="/sso-success" element={<SSOSuccess />} />
 
           {/* Protected routes — wrapped in Layout */}
           <Route element={<ProtectedRoute />}>

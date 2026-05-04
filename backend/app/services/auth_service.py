@@ -2,13 +2,14 @@
 Authentication service — Business Logic Layer.
 
 Handles password hashing, password verification, JWT token
-generation, and user authentication.
+generation, user authentication, and SSO user provisioning.
 
 SoC boundary: This module has NO knowledge of HTTP requests,
 FastAPI Depends, or HTTPException. It receives plain Python
 arguments and returns results or None.
 """
 
+import secrets
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
@@ -92,3 +93,60 @@ def is_setup_required(db: Session) -> bool:
     """Check if the system requires first-run setup (0 users)."""
     repo = UserRepository(db)
     return repo.count_users() == 0
+
+
+# ── SSO / OIDC ─────────────────────────────────────────────────
+
+
+def handle_sso_login(
+    db: Session,
+    email: str,
+    username: str,
+    user_groups: list[str],
+) -> User:
+    """
+    Provision or update a user from an SSO/OIDC login.
+
+    Role evaluation:
+        If settings.sso_admin_group is set and appears in
+        user_groups, the target role is "admin".
+        Otherwise, the target role is "readonly".
+
+    Auto-provision:
+        If no user with the given email exists, a new User is
+        created with a random impossible password.
+
+    Role sync:
+        If the user already exists, their role is updated to
+        match the target role derived from the IdP groups.
+
+    Returns:
+        The provisioned or updated User instance.
+    """
+    # Determine target role from IdP groups
+    target_role = "readonly"
+    if settings.sso_admin_group and settings.sso_admin_group in user_groups:
+        target_role = "admin"
+
+    repo = UserRepository(db)
+    user = repo.get_by_email(email)
+
+    if user is None:
+        # Auto-provision with an impossible random password
+        impossible_password = secrets.token_hex(32)
+        user = User(
+            username=username,
+            email=email,
+            hashed_password=hash_password(impossible_password),
+            role=target_role,
+        )
+        user = repo.create(user)
+    else:
+        # Sync role from IdP on every login
+        if user.role != target_role:
+            user.role = target_role
+            db.commit()
+            db.refresh(user)
+
+    return user
+

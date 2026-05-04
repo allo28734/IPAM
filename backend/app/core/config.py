@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     # Application metadata
     app_title: str = "IPAM — IP Address Management"
-    app_version: str = "2.1.0"
+    app_version: str = "3.0.0"
     debug: bool = True
 
     # Database — PostgreSQL via Docker (see docker-compose.yml)
@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "CHANGE-ME-in-production-use-a-real-secret"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60
+
+    # SSO / OIDC — optional, SSO is only active when all three are set
+    sso_client_id: str | None = None
+    sso_client_secret: str | None = None
+    sso_discovery_url: str | None = None
+    sso_admin_group: str | None = None
 
     # Redis / Celery
     redis_url: str = "redis://localhost:6379/0"
