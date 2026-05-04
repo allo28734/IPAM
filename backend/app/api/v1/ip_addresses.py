@@ -7,7 +7,7 @@ Delegates all business logic to IPAddressService.
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Response
 
-from app.api.deps import IPServiceDep, SubnetServiceDep, get_current_user
+from app.api.deps import IPServiceDep, SubnetServiceDep, get_current_user, get_current_active_admin
 from app.schemas.ip_address import (
     IPAddressAllocate,
     IPAddressCreate,
@@ -77,7 +77,7 @@ def export_ips(subnet_id: int, service: IPServiceDep):
     )
 
 
-@router.post("/subnets/{subnet_id}/ips/import")
+@router.post("/subnets/{subnet_id}/ips/import", dependencies=[Depends(get_current_active_admin)])
 async def import_ips(subnet_id: int, service: IPServiceDep, file: UploadFile = File(...)):
     """Import IP addresses from a CSV file."""
     if not file.filename.endswith('.csv'):
@@ -100,6 +100,7 @@ async def import_ips(subnet_id: int, service: IPServiceDep, file: UploadFile = F
     "/subnets/{subnet_id}/ips",
     response_model=IPAddressResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(get_current_active_admin)],
 )
 def assign_ip(subnet_id: int, body: IPAddressCreate, service: IPServiceDep):
     """Assign or reserve a specific IP address in a subnet."""
@@ -129,6 +130,7 @@ def assign_ip(subnet_id: int, body: IPAddressCreate, service: IPServiceDep):
     "/subnets/{subnet_id}/ips/next-available",
     response_model=IPAddressResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(get_current_active_admin)],
 )
 def allocate_next_available(
     subnet_id: int, body: IPAddressAllocate, service: IPServiceDep
@@ -155,7 +157,7 @@ def allocate_next_available(
 # ── Update IP ───────────────────────────────────────────────────
 
 
-@router.put("/ips/{ip_id}", response_model=IPAddressResponse)
+@router.put("/ips/{ip_id}", response_model=IPAddressResponse, dependencies=[Depends(get_current_active_admin)])
 def update_ip(ip_id: int, body: IPAddressUpdate, service: IPServiceDep):
     """Update IP address metadata (status, hostname, description)."""
     try:
@@ -177,7 +179,7 @@ def update_ip(ip_id: int, body: IPAddressUpdate, service: IPServiceDep):
 # ── Release IP (soft delete) ───────────────────────────────────
 
 
-@router.post("/ips/{ip_id}/release", response_model=IPAddressResponse)
+@router.post("/ips/{ip_id}/release", response_model=IPAddressResponse, dependencies=[Depends(get_current_active_admin)])
 def release_ip(ip_id: int, service: IPServiceDep):
     """Release an IP address (set status to 'available', clear hostname)."""
     try:
@@ -191,7 +193,7 @@ def release_ip(ip_id: int, service: IPServiceDep):
 # ── Delete IP (hard delete) ────────────────────────────────────
 
 
-@router.delete("/ips/{ip_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/ips/{ip_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(get_current_active_admin)])
 def delete_ip(ip_id: int, service: IPServiceDep):
     """Permanently remove an IP address record."""
     try:

@@ -16,7 +16,7 @@ from celery.result import AsyncResult
 from app.core.celery_app import celery_app
 from app.worker.sweep_tasks import run_subnet_sweep
 
-from app.api.deps import IPServiceDep, SubnetServiceDep, get_current_user
+from app.api.deps import IPServiceDep, SubnetServiceDep, get_current_user, get_current_active_admin
 from app.schemas.ip_address import IPAddressResponse
 from app.schemas.subnet import (
     DashboardStats,
@@ -72,7 +72,7 @@ def export_subnets(service: SubnetServiceDep):
     )
 
 
-@router.post("/import")
+@router.post("/import", dependencies=[Depends(get_current_active_admin)])
 async def import_subnets(service: SubnetServiceDep, file: UploadFile = File(...)):
     """Import subnets from a CSV file."""
     if not file.filename.endswith('.csv'):
@@ -91,7 +91,7 @@ async def import_subnets(service: SubnetServiceDep, file: UploadFile = File(...)
 # ── Create subnet ──────────────────────────────────────────────
 
 
-@router.post("", response_model=SubnetResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=SubnetResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(get_current_active_admin)])
 def create_subnet(body: SubnetCreate, service: SubnetServiceDep):
     """Create a new subnet."""
     try:
@@ -129,7 +129,7 @@ def get_subnet(subnet_id: int, service: SubnetServiceDep):
 # ── Update subnet ──────────────────────────────────────────────
 
 
-@router.put("/{subnet_id}", response_model=SubnetResponse)
+@router.put("/{subnet_id}", response_model=SubnetResponse, dependencies=[Depends(get_current_active_admin)])
 def update_subnet(subnet_id: int, body: SubnetUpdate, service: SubnetServiceDep):
     """Update subnet metadata (name, gateway, vlan, description)."""
     try:
@@ -153,7 +153,7 @@ def update_subnet(subnet_id: int, body: SubnetUpdate, service: SubnetServiceDep)
 # ── Delete subnet ──────────────────────────────────────────────
 
 
-@router.delete("/{subnet_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{subnet_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(get_current_active_admin)])
 def delete_subnet(subnet_id: int, service: SubnetServiceDep):
     """Delete a subnet and all its associated IP addresses."""
     try:
@@ -179,7 +179,7 @@ def get_utilization(subnet_id: int, service: SubnetServiceDep):
 # ── ICMP Sweep ──────────────────────────────────────────────────
 
 
-@router.post("/{subnet_id}/sweep")
+@router.post("/{subnet_id}/sweep", dependencies=[Depends(get_current_active_admin)])
 async def sweep_subnet_endpoint(subnet_id: int, service: SubnetServiceDep):
     """Trigger a background ICMP ping sweep for a subnet using Celery."""
     try:
