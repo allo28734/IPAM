@@ -22,6 +22,14 @@ COPY . .
 RUN chmod +x entrypoint.sh && \
     sed -i 's/\r$//' entrypoint.sh
 
+# Create a non-root user for the API process.
+# The celery_worker overrides CMD and uses network_mode: "host"
+# with root for raw socket Nmap scans — but the API itself
+# does not need elevated privileges.
+RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
 EXPOSE 8000
 
 CMD ["./entrypoint.sh"]

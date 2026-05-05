@@ -6,6 +6,7 @@ All configuration is centralized here to keep the rest of the
 application decoupled from environment specifics.
 """
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,17 +21,31 @@ class Settings(BaseSettings):
 
     # Application metadata
     app_title: str = "IPAM — IP Address Management"
-    app_version: str = "3.3.0"
-    debug: bool = True
+    app_version: str = "4.1.0"
+    debug: bool = False
 
     # Database — PostgreSQL via Docker (see docker-compose.yml)
     database_url: str = "postgresql://ipam:ipam_secret@localhost:5432/ipam"
 
-    # CORS — permissive for local development
+    # CORS — configurable via CORS_ORIGINS env var.
+    # Accepts a JSON array or comma-separated string:
+    #   CORS_ORIGINS=["https://ipam.example.com"]
+    #   CORS_ORIGINS=https://ipam.example.com,https://other.example.com
     cors_origins: list[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v):
+        if isinstance(v, str):
+            # Try JSON first, fall back to comma-separated
+            if v.startswith("["):
+                import json
+                return json.loads(v)
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
     # JWT / Auth
     jwt_secret_key: str
