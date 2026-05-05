@@ -44,7 +44,7 @@ services:
         condition: service_started
     environment:
       - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
     deploy:
       resources:
         limits:
@@ -52,19 +52,20 @@ services:
           memory: 512M
 
   # ── Celery Worker ────────────────────────────────────────────
-  # network_mode: "host" gives the worker direct access to the
-  # host's physical network interfaces, which is required for
-  # accurate Nmap OS fingerprinting, MAC discovery, and raw
-  # socket scans (SYN scans). Without this, Docker's NAT bridge
-  # intercepts and mangles outbound scan traffic.
+  # Instead of network_mode: "host" + root, we grant only the
+  # Linux capabilities Nmap needs for raw socket scans (SYN,
+  # ICMP) and network interface inspection (MAC discovery).
+  # This preserves Docker's network isolation and avoids giving
+  # the worker full root access to the host network stack.
   celery_worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: ipam_celery_worker
     restart: unless-stopped
-    network_mode: "host"
-    user: root   # Required for Nmap raw socket scans (SYN, OS fingerprint)
+    cap_add:
+      - NET_RAW       # Raw sockets for SYN scans and ICMP ping
+      - NET_ADMIN     # Network interface queries for MAC discovery
     command: ["celery", "-A", "app.core.celery_app", "worker", "--loglevel=info"]
     depends_on:
       db:
@@ -72,10 +73,8 @@ services:
       redis:
         condition: service_started
     environment:
-      # Host networking disables Docker DNS — use localhost since
-      # db (5432) and redis (6379) publish ports to the host.
-      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@localhost:5432/${DB_NAME}
-      - REDIS_URL=redis://localhost:6379/0
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
     deploy:
       resources:
         limits:
@@ -100,7 +99,7 @@ services:
         condition: service_started
     environment:
       - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
     deploy:
       resources:
         limits:
@@ -136,7 +135,7 @@ services:
     image: redis:alpine
     container_name: ipam_redis
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
     ports:
       - "127.0.0.1:6379:6379"
     volumes:

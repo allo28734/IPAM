@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     # Application metadata
     app_title: str = "IPAM — IP Address Management"
-    app_version: str = "4.1.0"
+    app_version: str = "4.2.0"
     debug: bool = False
 
     # Database — PostgreSQL via Docker (see docker-compose.yml)
