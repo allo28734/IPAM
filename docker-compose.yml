@@ -9,7 +9,12 @@ services:
     container_name: ipam_frontend
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "80:80"     # HTTP → HTTPS redirect
+      - "443:443"   # HTTPS
+    volumes:
+      # Mount production SSL certs here; falls back to self-signed at build time.
+      # Example: place cert.pem and key.pem in ./certs/
+      - ./certs:/etc/nginx/ssl:ro
     depends_on:
       - backend
 
@@ -28,16 +33,22 @@ services:
       redis:
         condition: service_started
     environment:
-      - DATABASE_URL=postgresql://ipam:ipam_secret@db:5432/ipam
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       - REDIS_URL=redis://redis:6379/0
 
   # ── Celery Worker ────────────────────────────────────────────
+  # network_mode: "host" gives the worker direct access to the
+  # host's physical network interfaces, which is required for
+  # accurate Nmap OS fingerprinting, MAC discovery, and raw
+  # socket scans (SYN scans). Without this, Docker's NAT bridge
+  # intercepts and mangles outbound scan traffic.
   celery_worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: ipam_celery_worker
     restart: unless-stopped
+    network_mode: "host"
     command: ["celery", "-A", "app.core.celery_app", "worker", "--loglevel=info"]
     depends_on:
       db:
@@ -45,7 +56,29 @@ services:
       redis:
         condition: service_started
     environment:
-      - DATABASE_URL=postgresql://ipam:ipam_secret@db:5432/ipam
+      # Host networking disables Docker DNS — use localhost since
+      # db (5432) and redis (6379) publish ports to the host.
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@localhost:5432/${DB_NAME}
+      - REDIS_URL=redis://localhost:6379/0
+
+  # ── Celery Beat (Scheduler) ──────────────────────────────────
+  # Beat is the periodic task scheduler — it publishes tasks to
+  # the broker on a configured schedule (e.g., hourly sweeps).
+  # Workers execute them; Beat only schedules them.
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ipam_celery_beat
+    restart: unless-stopped
+    command: ["celery", "-A", "app.core.celery_app", "beat", "--loglevel=info"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       - REDIS_URL=redis://redis:6379/0
 
   # ── PostgreSQL 15 ────────────────────────────────────────────
@@ -54,15 +87,15 @@ services:
     container_name: ipam_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ipam
-      POSTGRES_PASSWORD: ipam_secret
-      POSTGRES_DB: ipam
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ipam"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -72,8 +105,11 @@ services:
     image: redis:alpine
     container_name: ipam_redis
     restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "6379:6379"
+    volumes:
+      - redisdata:/data
 
   # ── pgAdmin 4 (optional – for debugging / browsing data) ────
   pgadmin:
@@ -81,8 +117,8 @@ services:
     container_name: ipam_pgadmin
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@ipam.local
-      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
     ports:
       - "5050:80"
     depends_on:
@@ -91,3 +127,4 @@ services:
 
 volumes:
   pgdata:
+  redisdata:

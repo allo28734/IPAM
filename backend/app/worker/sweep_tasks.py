@@ -137,3 +137,26 @@ def run_subnet_sweep(self, subnet_id: int):
         return {"error": str(e)}
     finally:
         db.close()
+
+
+@celery_app.task
+def sweep_all_subnets():
+    """
+    Periodic task (called by Celery Beat).
+
+    Queries every subnet in the database and fans out individual
+    run_subnet_sweep tasks so they execute concurrently across
+    available workers.
+    """
+    db = SessionLocal()
+    try:
+        subnet_ids = [s.id for s in db.query(Subnet).all()]
+        logger.info("Beat: dispatching sweeps for %d subnets", len(subnet_ids))
+        for sid in subnet_ids:
+            run_subnet_sweep.delay(sid)
+        return {"dispatched": len(subnet_ids)}
+    except Exception as e:
+        logger.error("sweep_all_subnets failed: %s", e)
+        return {"error": str(e)}
+    finally:
+        db.close()

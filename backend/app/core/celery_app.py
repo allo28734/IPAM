@@ -6,6 +6,7 @@ using Redis as both the message broker and the result backend.
 """
 
 from celery import Celery
+from celery.schedules import crontab
 from app.core.config import settings
 
 celery_app = Celery(
@@ -20,7 +21,13 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
-    # In a real production environment, you might want task routing, rate limits, etc.
+    # ── Periodic task schedule (driven by Celery Beat) ──────────
+    beat_schedule={
+        "sweep-all-subnets-hourly": {
+            "task": "app.worker.sweep_tasks.sweep_all_subnets",
+            "schedule": crontab(minute=0),  # top of every hour
+        },
+    },
 )
 
 # Auto-discover tasks in the app.worker package
