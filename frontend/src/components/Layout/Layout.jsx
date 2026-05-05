@@ -1,7 +1,16 @@
-import { Network, LayoutDashboard, History } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Network, LayoutDashboard, History, Scan } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
+import api from '../../lib/axios';
 
 const Layout = ({ children }) => {
+  const [features, setFeatures] = useState({ enable_network_discovery: true });
+
+  useEffect(() => {
+    api.get('/system/features')
+      .then(res => setFeatures(res.data))
+      .catch(err => console.error("Failed to fetch features", err));
+  }, []);
   return (
     <div className="app-container">
       {/* Sidebar Navigation */}
@@ -38,6 +47,16 @@ const Layout = ({ children }) => {
             <History size={20} />
             <span>Audit Log</span>
           </NavLink>
+
+          {features.enable_network_discovery && (
+            <NavLink 
+              to="/discovery-profiles" 
+              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+            >
+              <Scan size={20} />
+              <span>Discovery</span>
+            </NavLink>
+          )}
         </nav>
       </aside>
 

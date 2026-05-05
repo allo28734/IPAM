@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 
 export default function SetupWizard() {
-  const [formData, setFormData] = useState({ username: '', email: '', password: '', role: 'admin', base_domain: window.location.origin });
+  const [formData, setFormData] = useState({ username: '', email: '', password: '', role: 'admin', base_domain: window.location.origin, enable_network_discovery: true });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -41,16 +41,15 @@ export default function SetupWizard() {
       const token = loginRes.data.access_token;
       localStorage.setItem('access_token', token);
 
-      // Save System Settings (Application Domain)
-      if (formData.base_domain) {
-        await api.put('/system/settings', {
-          base_domain: formData.base_domain
-        }, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-      }
+      // Save System Settings (Application Domain & Features)
+      await api.put('/system/settings', {
+        base_domain: formData.base_domain,
+        enable_network_discovery: formData.enable_network_discovery
+      }, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
 
       navigate('/');
     } catch (err) {
@@ -131,6 +130,19 @@ export default function SetupWizard() {
                 value={formData.base_domain}
                 onChange={handleChange}
               />
+            </div>
+            <div className="flex items-center">
+              <input
+                id="enable_network_discovery"
+                name="enable_network_discovery"
+                type="checkbox"
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                checked={formData.enable_network_discovery}
+                onChange={(e) => setFormData({ ...formData, enable_network_discovery: e.target.checked })}
+              />
+              <label htmlFor="enable_network_discovery" className="ml-2 block text-sm text-gray-900">
+                Enable Background Network Scanning (Requires 'discovery' Docker profile)
+              </label>
             </div>
           </div>
 

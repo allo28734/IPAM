@@ -9,17 +9,7 @@ services:
     container_name: ipam_frontend
     restart: unless-stopped
     ports:
-      - "80:80"     # HTTP → HTTPS redirect
-      - "443:443"   # HTTPS
-    volumes:
-      # PRODUCTION: Mount real SSL certs (e.g., Let's Encrypt) here.
-      # The Dockerfile generates a self-signed fallback for development.
-      #
-      # Let's Encrypt example (certbot):
-      #   certbot certonly --standalone -d ipam.example.com
-      #   cp /etc/letsencrypt/live/ipam.example.com/fullchain.pem ./certs/cert.pem
-      #   cp /etc/letsencrypt/live/ipam.example.com/privkey.pem  ./certs/key.pem
-      - ./certs:/etc/nginx/ssl:ro
+      - "80:80"     # Plain HTTP — Must use external reverse proxy for HTTPS
     depends_on:
       - backend
     deploy:
@@ -41,8 +31,8 @@ services:
       redis:
         condition: service_started
     environment:
-      - DATABASE_URL=postgresql://ipam_admin:ipam_internal_secure_db_pass@db:5432/ipam
-      - REDIS_URL=redis://:ipam_internal_secure_redis_pass@redis:6379/0
+      - DATABASE_URL=${EXTERNAL_DB_URL:-postgresql://ipam_admin:ipam_internal_secure_db_pass@db:5432/ipam}
+      - REDIS_URL=${EXTERNAL_REDIS_URL:-redis://:ipam_internal_secure_redis_pass@redis:6379/0}
     volumes:
       - backend_data:/app/data
     healthcheck:
@@ -69,6 +59,7 @@ services:
       dockerfile: Dockerfile
     container_name: ipam_celery_worker
     restart: unless-stopped
+    profiles: ["discovery"]
     cap_add:
       - NET_RAW       # Raw sockets for SYN scans and ICMP ping
       - NET_ADMIN     # Network interface queries for MAC discovery
@@ -83,8 +74,8 @@ services:
     volumes:
       - backend_data:/app/data
     environment:
-      - DATABASE_URL=postgresql://ipam_admin:ipam_internal_secure_db_pass@db:5432/ipam
-      - REDIS_URL=redis://:ipam_internal_secure_redis_pass@redis:6379/0
+      - DATABASE_URL=${EXTERNAL_DB_URL:-postgresql://ipam_admin:ipam_internal_secure_db_pass@db:5432/ipam}
+      - REDIS_URL=${EXTERNAL_REDIS_URL:-redis://:ipam_internal_secure_redis_pass@redis:6379/0}
     deploy:
       resources:
         limits:
@@ -101,6 +92,7 @@ services:
       dockerfile: Dockerfile
     container_name: ipam_celery_beat
     restart: unless-stopped
+    profiles: ["discovery"]
     command: ["bash", "-c", "source /app/data/app_secrets.env && celery -A app.core.celery_app beat --loglevel=info"]
     depends_on:
       backend:
@@ -112,8 +104,8 @@ services:
     volumes:
       - backend_data:/app/data
     environment:
-      - DATABASE_URL=postgresql://ipam_admin:ipam_internal_secure_db_pass@db:5432/ipam
-      - REDIS_URL=redis://:ipam_internal_secure_redis_pass@redis:6379/0
+      - DATABASE_URL=${EXTERNAL_DB_URL:-postgresql://ipam_admin:ipam_internal_secure_db_pass@db:5432/ipam}
+      - REDIS_URL=${EXTERNAL_REDIS_URL:-redis://:ipam_internal_secure_redis_pass@redis:6379/0}
     deploy:
       resources:
         limits:

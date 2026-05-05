@@ -15,3 +15,6 @@ class SystemSettings(Base):
     sso_client_secret = Column(String, nullable=True)
     sso_discovery_url = Column(String, nullable=True)
     sso_admin_group = Column(String, nullable=True)
+
+    # Feature Toggles
+    enable_network_discovery = Column(Boolean, nullable=False, default=True)

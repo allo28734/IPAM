@@ -14,6 +14,7 @@ const SubnetDetail = () => {
   const [sweepTaskId, setSweepTaskId] = useState(null);
   const [sweepStatus, setSweepStatus] = useState(null);
   const [error, setError] = useState(null);
+  const [features, setFeatures] = useState({ enable_network_discovery: true });
   
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [assignForm, setAssignForm] = useState({ address: '', hostname: '', status: 'assigned', tags: {} });
@@ -35,14 +36,16 @@ const SubnetDetail = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [subnetRes, ipsRes, utilRes] = await Promise.all([
+      const [subnetRes, ipsRes, utilRes, featuresRes] = await Promise.all([
         api.get(`/subnets/${id}`),
         api.get(`/subnets/${id}/ips`),
-        api.get(`/subnets/${id}/utilization`)
+        api.get(`/subnets/${id}/utilization`),
+        api.get('/system/features').catch(() => ({ data: { enable_network_discovery: false } }))
       ]);
       setSubnet(subnetRes.data);
       setIps(ipsRes.data.items);
       setUtilization(utilRes.data);
+      if (featuresRes.data) setFeatures(featuresRes.data);
     } catch (err) {
       console.error('Failed to load subnet details:', err);
       setError('Failed to load subnet details.');
@@ -217,9 +220,11 @@ const SubnetDetail = () => {
           <button className="btn btn-secondary" onClick={() => { setIsImportModalOpen(true); setImportResult(null); }}>
             <Upload size={16} /> Import CSV
           </button>
-          <button className="btn btn-secondary" onClick={handleSweep} disabled={sweeping}>
-            <Activity size={16} className={sweeping ? 'animate-pulse' : ''} /> {sweeping ? `Sweeping... (${sweepStatus || 'Starting'})` : 'Sweep Subnet'}
-          </button>
+          {features.enable_network_discovery && (
+            <button className="btn btn-secondary" onClick={handleSweep} disabled={sweeping}>
+              <Activity size={16} className={sweeping ? 'animate-pulse' : ''} /> {sweeping ? `Sweeping... (${sweepStatus || 'Starting'})` : 'Sweep Subnet'}
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={handleAutoAllocate}>
             <Settings size={16} /> Auto-Allocate Next IP
           </button>

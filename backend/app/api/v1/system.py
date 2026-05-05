@@ -19,6 +19,7 @@ class SystemSettingsUpdate(BaseModel):
     sso_client_secret: str | None = None
     sso_discovery_url: str | None = None
     sso_admin_group: str | None = None
+    enable_network_discovery: bool | None = None
 
 
 class SystemSettingsResponse(BaseModel):
@@ -26,6 +27,7 @@ class SystemSettingsResponse(BaseModel):
     sso_client_id: str | None
     sso_discovery_url: str | None
     sso_admin_group: str | None
+    enable_network_discovery: bool
     # Omit sso_client_secret for security
 
 
@@ -40,6 +42,7 @@ def get_settings(
         sso_client_id=sys_settings.sso_client_id,
         sso_discovery_url=sys_settings.sso_discovery_url,
         sso_admin_group=sys_settings.sso_admin_group,
+        enable_network_discovery=sys_settings.enable_network_discovery,
     )
 
 
@@ -61,6 +64,8 @@ def update_settings(
         sys_settings.sso_discovery_url = body.sso_discovery_url
     if body.sso_admin_group is not None:
         sys_settings.sso_admin_group = body.sso_admin_group
+    if body.enable_network_discovery is not None:
+        sys_settings.enable_network_discovery = body.enable_network_discovery
 
     db.add(sys_settings)
     db.commit()
@@ -71,4 +76,19 @@ def update_settings(
         sso_client_id=sys_settings.sso_client_id,
         sso_discovery_url=sys_settings.sso_discovery_url,
         sso_admin_group=sys_settings.sso_admin_group,
+        enable_network_discovery=sys_settings.enable_network_discovery,
+    )
+
+
+class FeatureFlagsResponse(BaseModel):
+    enable_network_discovery: bool
+
+
+@router.get("/features", response_model=FeatureFlagsResponse)
+def get_public_features(
+    sys_settings: SystemSettingsDep,
+):
+    """Get public feature flags (No authentication required)."""
+    return FeatureFlagsResponse(
+        enable_network_discovery=sys_settings.enable_network_discovery,
     )
