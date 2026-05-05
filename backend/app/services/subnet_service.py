@@ -153,13 +153,30 @@ class SubnetService:
 
         # 1.5 SSRF Prevention Blocklist
         import ipaddress
-        blocked_cidrs_v4 = ["127.0.0.0/8", "169.254.169.254/32", "172.17.0.0/16"]
+        blocked_cidrs_v4 = [
+            "0.0.0.0/8", "127.0.0.0/8", "169.254.169.254/32", "172.17.0.0/16",
+        ]
         blocked_cidrs_v6 = ["::1/128", "fe80::/10", "fd00:ec2::254/128"]
-        
-        blocked_networks = [ipaddress.ip_network(b) for b in (blocked_cidrs_v4 if ip_version == 4 else blocked_cidrs_v6)]
+
+        # Detect IPv4-mapped IPv6 addresses (e.g. ::ffff:127.0.0.1/128)
+        # and convert them to their real IPv4 representation before
+        # blocklist evaluation, preventing trivial SSRF bypass.
+        effective_network = network
+        if network.version == 6 and network.network_address.ipv4_mapped:
+            mapped_v4 = network.network_address.ipv4_mapped
+            v4_prefix = network.prefixlen - 96  # IPv6→IPv4 prefix adjustment
+            effective_network = ipaddress.ip_network(
+                f"{mapped_v4}/{v4_prefix}", strict=False
+            )
+            ip_version = 4
+
+        blocked_networks = [
+            ipaddress.ip_network(b)
+            for b in (blocked_cidrs_v4 if ip_version == 4 else blocked_cidrs_v6)
+        ]
 
         for blocked in blocked_networks:
-            if network.overlaps(blocked):
+            if effective_network.overlaps(blocked):
                 raise SubnetValidationError(
                     f"Creation of subnets overlapping with restricted infrastructure network ({blocked}) is prohibited for security reasons."
                 )
@@ -173,24 +190,30 @@ class SubnetService:
                 )
 
         # 3. Check for overlaps with existing subnets
-        if existing_subnets is None:
-            existing_subnets = self._repo.get_all()
-        for existing in existing_subnets:
-            if subnets_overlap(cidr, existing.cidr):
-                # Overlaps are ONLY allowed if the existing subnet is an ancestor of the new subnet
-                is_ancestor = False
-                curr_parent_id = parent_id
-                while curr_parent_id is not None:
-                    if curr_parent_id == existing.id:
-                        is_ancestor = True
-                        break
-                    curr_parent = self.get_subnet(curr_parent_id)
-                    curr_parent_id = curr_parent.parent_id
-                
-                if not is_ancestor:
-                    raise SubnetConflictError(
-                        f"Subnet {cidr} overlaps with existing subnet {existing.cidr} and is not a valid child."
-                    )
+        #    Delegate to PostgreSQL for O(1)-per-check overlap detection
+        #    when no cached list is provided.
+        if existing_subnets is not None:
+            overlapping = [
+                s for s in existing_subnets if subnets_overlap(cidr, s.cidr)
+            ]
+        else:
+            overlapping = self._repo.find_overlapping(cidr)
+
+        for existing in overlapping:
+            # Overlaps are ONLY allowed if the existing subnet is an ancestor
+            is_ancestor = False
+            curr_parent_id = parent_id
+            while curr_parent_id is not None:
+                if curr_parent_id == existing.id:
+                    is_ancestor = True
+                    break
+                curr_parent = self.get_subnet(curr_parent_id)
+                curr_parent_id = curr_parent.parent_id
+
+            if not is_ancestor:
+                raise SubnetConflictError(
+                    f"Subnet {cidr} overlaps with existing subnet {existing.cidr} and is not a valid child."
+                )
 
         # 3. Validate gateway is within the subnet
         if gateway and not is_ip_in_subnet(gateway, cidr):
@@ -341,35 +364,47 @@ class SubnetService:
             
         return output.getvalue()
 
+    # Maximum number of rows allowed per CSV import to prevent DoS
+    MAX_IMPORT_ROWS = 1000
+
     def bulk_import(self, csv_file_obj) -> dict:
         """
         Import subnets from a CSV file iteratively.
+
+        Security limits:
+          - Maximum of MAX_IMPORT_ROWS rows per file.
+          - Overlap detection is delegated to PostgreSQL per row
+            (no O(N²) in-memory loop).
+
         Note: Parents must appear before children in the CSV file.
         """
-        import ipaddress
-        
         reader = csv.DictReader(csv_file_obj)
-        
+
         created_count = 0
         errors = []
-        
-        # Pre-fetch existing subnets to avoid O(N^2) database queries during import
-        cached_subnets = list(self._repo.get_all())
-        
+
         for idx, row in enumerate(reader):
+            # Enforce row limit to prevent CPU/memory exhaustion
+            if idx >= self.MAX_IMPORT_ROWS:
+                errors.append(
+                    f"Import capped at {self.MAX_IMPORT_ROWS} rows. "
+                    f"Remaining rows were skipped."
+                )
+                break
+
             name = row.get("name", "").strip()
             cidr = row.get("cidr", "").strip()
             if not name or not cidr:
                 errors.append(f"Row {idx+1}: Missing required 'name' or 'cidr'")
                 continue
-                
+
             gateway = row.get("gateway", "").strip() or None
             vlan_id_str = row.get("vlan_id", "").strip()
             vlan_id = int(vlan_id_str) if vlan_id_str.isdigit() else None
             description = row.get("description", "").strip() or None
             parent_id_str = row.get("parent_id", "").strip()
             parent_id = int(parent_id_str) if parent_id_str.isdigit() else None
-            
+
             tags_str = row.get("tags", "").strip()
             tags = {}
             if tags_str:
@@ -378,8 +413,10 @@ class SubnetService:
                 except json.JSONDecodeError:
                     errors.append(f"Row {idx+1} ({cidr}): Invalid JSON in 'tags'")
                     continue
-                    
+
             try:
+                # Overlap detection now delegated to PostgreSQL
+                # (no existing_subnets cache passed)
                 created = self.create_subnet(
                     name=name,
                     cidr=cidr,
@@ -388,14 +425,10 @@ class SubnetService:
                     description=description,
                     parent_id=parent_id,
                     tags=tags,
-                    existing_subnets=cached_subnets
                 )
-                cached_subnets.append(created)
                 created_count += 1
-                if created_count % 1000 == 0:
-                    self._db.commit()
             except (SubnetValidationError, SubnetConflictError) as e:
                 errors.append(f"Row {idx+1} ({cidr}): {str(e)}")
-                
+
         self._db.commit()
         return {"imported": created_count, "errors": errors}

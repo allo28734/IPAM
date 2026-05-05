@@ -132,6 +132,11 @@ def handle_sso_login(
     user = repo.get_by_email(email)
 
     if user is None:
+        # Prevent username collision
+        base_username = username
+        while repo.get_by_username(username) is not None:
+            username = f"{base_username}_{secrets.token_hex(4)}"
+
         # Auto-provision with an impossible random password
         impossible_password = secrets.token_hex(32)
         user = User(

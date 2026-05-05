@@ -7,7 +7,7 @@ CIDR lookup and overlap checking. Contains NO business logic.
 
 from typing import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.models.subnet import Subnet
@@ -59,3 +59,25 @@ class SubnetRepository(BaseRepository[Subnet]):
         """
         stmt = select(Subnet.cidr)
         return list(self._db.scalars(stmt).all())
+
+    def find_overlapping(self, cidr: str) -> Sequence[Subnet]:
+        """
+        Return all existing subnets whose CIDR overlaps with the given CIDR.
+
+        Delegates overlap detection entirely to PostgreSQL using
+        native inet/cidr operators (&&), avoiding O(N) Python-side
+        iteration per check.
+        """
+        stmt = text(
+            "SELECT id FROM subnets WHERE cidr::inet <<= :cidr::inet "
+            "OR cidr::inet >>= :cidr::inet"
+        )
+        result = self._db.execute(stmt, {"cidr": cidr})
+        overlapping_ids = [row[0] for row in result]
+        if not overlapping_ids:
+            return []
+        return list(
+            self._db.scalars(
+                select(Subnet).where(Subnet.id.in_(overlapping_ids))
+            ).all()
+        )

@@ -75,7 +75,7 @@ def login_for_access_token(
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    access_token = create_access_token(data={"sub": user.username})
+    access_token = create_access_token(data={"sub": str(user.id)})
     return Token(access_token=access_token)
 
 
@@ -246,7 +246,7 @@ async def sso_callback(request: Request, db: DbSession):
     user = handle_sso_login(db, email, username, user_groups)
 
     # Issue a local IPAM JWT — same as local login
-    access_token = create_access_token(data={"sub": user.username})
+    access_token = create_access_token(data={"sub": str(user.id)})
 
     # 302 redirect to the frontend SSOSuccess page with the token in the URL fragment
     frontend_url = f"/sso-success#token={access_token}"

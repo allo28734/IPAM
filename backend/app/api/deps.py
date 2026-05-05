@@ -64,14 +64,15 @@ def get_current_user(
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
         )
-        username: str | None = payload.get("sub")
-        if username is None:
+        user_id_str: str | None = payload.get("sub")
+        if user_id_str is None:
             raise credentials_exception
-    except JWTError:
+        user_id = int(user_id_str)
+    except (JWTError, ValueError):
         raise credentials_exception
 
     repo = UserRepository(db)
-    user = repo.get_by_username(username)
+    user = repo.get_by_id(user_id)
     if user is None or not user.is_active:
         raise credentials_exception
 

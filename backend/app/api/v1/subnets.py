@@ -73,18 +73,34 @@ def export_subnets(service: SubnetServiceDep):
 
 
 @router.post("/import", dependencies=[Depends(get_current_active_admin)])
-async def import_subnets(service: SubnetServiceDep, file: UploadFile = File(...)):
-    """Import subnets from a CSV file."""
+async def import_subnets(file: UploadFile = File(...)):
+    """Import subnets from a CSV file (processed in a background task)."""
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="File must be a CSV")
         
     if file.size is not None and file.size > 5 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File size exceeds 5MB limit")
-        
+
     import codecs
-    iterator = codecs.iterdecode(file.file, 'utf-8-sig')
-    result = service.bulk_import(iterator)
-    return result
+    from app.worker.import_tasks import run_bulk_subnet_import
+
+    # Read the file content into a string for Celery serialization
+    raw_bytes = await file.read()
+    csv_text = raw_bytes.decode("utf-8-sig")
+
+    task = run_bulk_subnet_import.delay(csv_text)
+    return {"task_id": task.id, "message": "Import initiated in the background"}
+
+
+@router.get("/import/status/{task_id}")
+def get_import_status(task_id: str):
+    """Check the status of a background CSV import Celery task."""
+    result = AsyncResult(task_id, app=celery_app)
+    return {
+        "task_id": task_id,
+        "status": result.state,
+        "result": result.result if result.ready() else None,
+    }
 
 
 # ── Create subnet ──────────────────────────────────────────────
