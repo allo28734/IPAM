@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     # Application metadata
     app_title: str = "IPAM — IP Address Management"
-    app_version: str = "3.0.0"
+    app_version: str = "3.1.0"
     debug: bool = True
 
     # Database — PostgreSQL via Docker (see docker-compose.yml)
@@ -45,6 +45,12 @@ class Settings(BaseSettings):
 
     # Redis / Celery
     redis_url: str = "redis://localhost:6379/0"
+
+    # Deep Discovery Encryption Key
+    # Used for securely encrypting/decrypting SNMP profiles via Fernet.
+    # In production, ALWAYS override this via .env using a securely generated key.
+    # To generate a key, run: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    encryption_key: str = "kPZc59k40K0_YcZc0XlB_v2WJ9P6zZf9L6B4yC7a9Gk="
 
 
 # Singleton instance used across the application

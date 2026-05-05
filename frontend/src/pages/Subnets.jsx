@@ -20,10 +20,11 @@ const buildSubnetTree = (subnets) => {
 
 const Subnets = () => {
   const [subnets, setSubnets] = useState([]);
+  const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [formData, setFormData] = useState({ name: '', cidr: '', gateway: '', vlan_id: '', description: '', parent_id: '', tags: {} });
+  const [formData, setFormData] = useState({ name: '', cidr: '', gateway: '', vlan_id: '', description: '', parent_id: '', discovery_profile_id: '', tags: {} });
   const [error, setError] = useState(null);
   
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -35,13 +36,17 @@ const Subnets = () => {
   const [tagKey, setTagKey] = useState('');
   const [tagValue, setTagValue] = useState('');
 
-  const fetchSubnets = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/subnets', { params: { search } });
-      setSubnets(response.data.items);
+      const [subnetsRes, profilesRes] = await Promise.all([
+        api.get('/subnets', { params: { search } }),
+        api.get('/discovery-profiles').catch(() => ({ data: [] }))
+      ]);
+      setSubnets(subnetsRes.data.items || subnetsRes.data);
+      setProfiles(profilesRes.data || []);
     } catch (err) {
-      console.error('Failed to fetch subnets:', err);
+      console.error('Failed to fetch data:', err);
       setError('Failed to load subnets.');
     } finally {
       setLoading(false);
@@ -50,7 +55,7 @@ const Subnets = () => {
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
-      fetchSubnets();
+      fetchData();
     }, 300);
     return () => clearTimeout(delayDebounceFn);
   }, [search]);
@@ -75,11 +80,14 @@ const Subnets = () => {
       if (!payload.description) delete payload.description;
       if (!payload.parent_id) delete payload.parent_id;
       else payload.parent_id = parseInt(payload.parent_id, 10);
+      
+      if (!payload.discovery_profile_id) delete payload.discovery_profile_id;
+      else payload.discovery_profile_id = parseInt(payload.discovery_profile_id, 10);
 
       await api.post('/subnets', payload);
       setIsModalOpen(false);
-      setFormData({ name: '', cidr: '', gateway: '', vlan_id: '', description: '', parent_id: '', tags: {} });
-      fetchSubnets();
+      setFormData({ name: '', cidr: '', gateway: '', vlan_id: '', description: '', parent_id: '', discovery_profile_id: '', tags: {} });
+      fetchData();
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to create subnet. Check CIDR overlaps or format.');
     }
@@ -129,7 +137,7 @@ const Subnets = () => {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       setImportResult(response.data);
-      fetchSubnets();
+      fetchData();
     } catch (err) {
       setImportResult({ error: err.response?.data?.detail || 'Import failed' });
     } finally {
@@ -282,6 +290,20 @@ const Subnets = () => {
                     <option value="">-- None (Root Subnet) --</option>
                     {subnets.map(s => (
                       <option key={s.id} value={s.id}>{s.name} ({s.cidr})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Discovery Profile (Optional)</label>
+                  <select 
+                    className="form-input"
+                    value={formData.discovery_profile_id}
+                    onChange={(e) => setFormData({ ...formData, discovery_profile_id: e.target.value })}
+                  >
+                    <option value="">-- None --</option>
+                    {profiles.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </select>
                 </div>

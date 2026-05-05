@@ -33,6 +33,10 @@ class IPAddress(Base):
     last_seen: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    mac_address: Mapped[str | None] = mapped_column(String(17), nullable=True)
+    vendor: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    os_guess: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    device_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     tags: Mapped[dict | None] = mapped_column(JSON, default=dict, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(

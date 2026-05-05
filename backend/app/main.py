@@ -23,6 +23,7 @@ from app.api.v1 import auth as auth_router
 from app.api.v1 import dashboard as dashboard_router
 from app.api.v1 import ip_addresses as ip_router
 from app.api.v1 import subnets as subnet_router
+from app.api.v1 import discovery_profiles as discovery_profile_router
 
 
 @asynccontextmanager
@@ -59,6 +60,7 @@ def create_app() -> FastAPI:
     app.include_router(ip_router.router, prefix=api_prefix)
     app.include_router(audit_router.router, prefix=api_prefix)
     app.include_router(dashboard_router.router, prefix=api_prefix)
+    app.include_router(discovery_profile_router.router, prefix=api_prefix)
 
     # Health-check endpoint
     @app.get("/health", tags=["system"])

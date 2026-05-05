@@ -29,6 +29,9 @@ class Subnet(Base):
     parent_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("subnets.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    discovery_profile_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("discovery_profiles.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     tags: Mapped[dict | None] = mapped_column(JSON, default=dict, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(

@@ -261,6 +261,10 @@ class IPAddressService:
         status: str | None = None,
         hostname: str | None = None,
         description: str | None = None,
+        mac_address: str | None = None,
+        vendor: str | None = None,
+        os_guess: str | None = None,
+        device_type: str | None = None,
         tags: dict | None = None,
     ) -> IPAddress:
         """Update IP address metadata and/or status."""
@@ -279,6 +283,14 @@ class IPAddressService:
             update_data["hostname"] = hostname
         if description is not None:
             update_data["description"] = description
+        if mac_address is not None:
+            update_data["mac_address"] = mac_address
+        if vendor is not None:
+            update_data["vendor"] = vendor
+        if os_guess is not None:
+            update_data["os_guess"] = os_guess
+        if device_type is not None:
+            update_data["device_type"] = device_type
         if tags is not None:
             update_data["tags"] = tags
 

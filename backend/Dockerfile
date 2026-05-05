@@ -5,6 +5,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     gcc \
     iputils-ping \
+    nmap \
+    nmap-scripts \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

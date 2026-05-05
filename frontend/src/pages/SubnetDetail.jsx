@@ -261,6 +261,9 @@ const SubnetDetail = () => {
                 <th>Address</th>
                 <th>Status</th>
                 <th>Hostname</th>
+                <th>MAC Address</th>
+                <th>Vendor</th>
+                <th>OS</th>
                 <th>Tags</th>
                 <th>Assigned At</th>
                 <th>Last Seen</th>
@@ -270,7 +273,7 @@ const SubnetDetail = () => {
             <tbody>
               {ips.length === 0 ? (
                 <tr>
-                  <td colSpan="7" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
+                  <td colSpan="10" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
                     No IPs allocated in this subnet.
                   </td>
                 </tr>
@@ -284,6 +287,9 @@ const SubnetDetail = () => {
                       </span>
                     </td>
                     <td>{ip.hostname || '-'}</td>
+                    <td>{ip.mac_address || '-'}</td>
+                    <td>{ip.vendor || '-'}</td>
+                    <td>{ip.os_guess || '-'}</td>
                     <td>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                         {ip.tags && Object.entries(ip.tags).map(([k, v]) => (

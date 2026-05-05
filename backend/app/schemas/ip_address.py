@@ -36,6 +36,10 @@ class IPAddressUpdate(BaseModel):
     status: Optional[str] = Field(None, examples=["assigned", "reserved", "available"])
     hostname: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = Field(None, max_length=500)
+    mac_address: Optional[str] = Field(None, max_length=17)
+    vendor: Optional[str] = Field(None, max_length=255)
+    os_guess: Optional[str] = Field(None, max_length=255)
+    device_type: Optional[str] = Field(None, max_length=100)
     tags: Optional[dict[str, str]] = Field(None)
 
 
@@ -54,6 +58,10 @@ class IPAddressResponse(BaseModel):
     status: str
     hostname: Optional[str] = None
     description: Optional[str] = None
+    mac_address: Optional[str] = None
+    vendor: Optional[str] = None
+    os_guess: Optional[str] = None
+    device_type: Optional[str] = None
     tags: Optional[dict[str, str]] = None
     last_seen: Optional[datetime] = None
     created_at: datetime
