@@ -31,8 +31,8 @@ services:
       redis:
         condition: service_started
     environment:
-      - DATABASE_URL=${EXTERNAL_DB_URL:-postgresql://ipam_admin:ipam_internal_secure_db_pass@db:5432/ipam}
-      - REDIS_URL=${EXTERNAL_REDIS_URL:-redis://:ipam_internal_secure_redis_pass@redis:6379/0}
+      - DATABASE_URL=${EXTERNAL_DB_URL:-postgresql://${DB_USER:-ipam_admin}:${DB_PASSWORD:-ipam_internal_secure_db_pass}@db:5432/${DB_NAME:-ipam}}
+      - REDIS_URL=${EXTERNAL_REDIS_URL:-redis://:${REDIS_PASSWORD:-ipam_internal_secure_redis_pass}@redis:6379/0}
     volumes:
       - backend_data:/app/data
     healthcheck:
@@ -74,8 +74,8 @@ services:
     volumes:
       - backend_data:/app/data
     environment:
-      - DATABASE_URL=${EXTERNAL_DB_URL:-postgresql://ipam_admin:ipam_internal_secure_db_pass@db:5432/ipam}
-      - REDIS_URL=${EXTERNAL_REDIS_URL:-redis://:ipam_internal_secure_redis_pass@redis:6379/0}
+      - DATABASE_URL=${EXTERNAL_DB_URL:-postgresql://${DB_USER:-ipam_admin}:${DB_PASSWORD:-ipam_internal_secure_db_pass}@db:5432/${DB_NAME:-ipam}}
+      - REDIS_URL=${EXTERNAL_REDIS_URL:-redis://:${REDIS_PASSWORD:-ipam_internal_secure_redis_pass}@redis:6379/0}
     deploy:
       resources:
         limits:
@@ -104,8 +104,8 @@ services:
     volumes:
       - backend_data:/app/data
     environment:
-      - DATABASE_URL=${EXTERNAL_DB_URL:-postgresql://ipam_admin:ipam_internal_secure_db_pass@db:5432/ipam}
-      - REDIS_URL=${EXTERNAL_REDIS_URL:-redis://:ipam_internal_secure_redis_pass@redis:6379/0}
+      - DATABASE_URL=${EXTERNAL_DB_URL:-postgresql://${DB_USER:-ipam_admin}:${DB_PASSWORD:-ipam_internal_secure_db_pass}@db:5432/${DB_NAME:-ipam}}
+      - REDIS_URL=${EXTERNAL_REDIS_URL:-redis://:${REDIS_PASSWORD:-ipam_internal_secure_redis_pass}@redis:6379/0}
     deploy:
       resources:
         limits:
@@ -118,13 +118,13 @@ services:
     container_name: ipam_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ipam_admin
-      POSTGRES_PASSWORD: ipam_internal_secure_db_pass
-      POSTGRES_DB: ipam
+      POSTGRES_USER: ${DB_USER:-ipam_admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-ipam_internal_secure_db_pass}
+      POSTGRES_DB: ${DB_NAME:-ipam}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ipam_admin -d ipam"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -139,7 +139,7 @@ services:
     image: redis:alpine
     container_name: ipam_redis
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "ipam_internal_secure_redis_pass"]
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-ipam_internal_secure_redis_pass}"]
     volumes:
       - redisdata:/data
     deploy:

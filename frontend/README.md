@@ -1,16 +1,36 @@
-# React + Vite
+# IPAM Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This directory contains the user interface for the IPAM application. It is built using **React** and **Vite** and uses vanilla CSS for styling.
 
-Currently, two official plugins are available:
+## Prerequisites
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Node.js (Version 22.x or later)
+- npm (Node Package Manager)
 
-## React Compiler
+*Note: If you are using the `start.bat` or `start.ps1` scripts from the root directory, a local version of Node.js is automatically used from the `node_env` folder.*
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Local Development
 
-## Expanding the ESLint configuration
+To run the frontend locally and communicate with a local backend server:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+1. **Install Dependencies**:
+   ```bash
+   cd frontend
+   npm install
+   ```
+
+2. **Start the Development Server**:
+   ```bash
+   npm run dev
+   ```
+   This will start the Vite dev server, typically accessible at `http://localhost:5173`. Ensure your backend is also running on `http://localhost:8000`.
+
+## Building for Production
+
+When deploying via Docker Compose, the `Dockerfile` automatically builds the production bundle and serves it using Nginx.
+
+To manually build the production bundle:
+```bash
+npm run build
+```
+This generates the static files in the `dist` directory, which can be hosted on any static file server or CDN.
