@@ -380,26 +380,31 @@ class IPAddressService:
             "description", "tags"
         ])
         
+        def sanitize(val):
+            if isinstance(val, str) and val and val[0] in ('=', '+', '-', '@', '\t', '\r'):
+                return f"'{val}"
+            return val
+            
         for ip in ips:
             tags_str = json.dumps(ip.tags) if ip.tags else ""
-            writer.writerow([
+            row = [
                 ip.id, ip.address, ip.status, ip.hostname or "",
                 ip.description or "", tags_str
-            ])
+            ]
+            writer.writerow([sanitize(v) for v in row])
             
         return output.getvalue()
 
-    def bulk_import(self, subnet_id: int, csv_content: str) -> dict:
+    def bulk_import(self, subnet_id: int, csv_file_obj) -> dict:
         """
-        Import IP addresses from a CSV string into a specific subnet.
+        Import IP addresses from a CSV file into a specific subnet iteratively.
         """
-        reader = csv.DictReader(io.StringIO(csv_content))
-        rows = list(reader)
+        reader = csv.DictReader(csv_file_obj)
         
         created_count = 0
         errors = []
         
-        for idx, row in enumerate(rows):
+        for idx, row in enumerate(reader):
             address = row.get("address", "").strip()
             if not address:
                 errors.append(f"Row {idx+1}: Missing required 'address'")
@@ -428,7 +433,10 @@ class IPAddressService:
                     tags=tags
                 )
                 created_count += 1
+                if created_count % 1000 == 0:
+                    self._db.commit()
             except (IPValidationError, IPConflictError, SubnetNotFoundError) as e:
                 errors.append(f"Row {idx+1} ({address}): {str(e)}")
                 
+        self._db.commit()
         return {"imported": created_count, "errors": errors}

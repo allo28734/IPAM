@@ -150,6 +150,20 @@ class SubnetService:
         except ValueError as exc:
             raise SubnetValidationError(str(exc)) from exc
 
+        # 1.5 SSRF Prevention Blocklist
+        import ipaddress
+        if ip_version == 4:
+            blocked_cidrs = [
+                ipaddress.IPv4Network("127.0.0.0/8"),
+                ipaddress.IPv4Network("169.254.169.254/32"),
+                ipaddress.IPv4Network("172.17.0.0/16"),
+            ]
+            for blocked in blocked_cidrs:
+                if network.overlaps(blocked):
+                    raise SubnetValidationError(
+                        f"Creation of subnets overlapping with restricted infrastructure network ({blocked}) is prohibited for security reasons."
+                    )
+
         # 2. Parent validation and strict CIDR containment
         if parent_id is not None:
             parent = self.get_subnet(parent_id)
@@ -309,38 +323,34 @@ class SubnetService:
             "description", "parent_id", "tags"
         ])
         
+        def sanitize(val):
+            if isinstance(val, str) and val and val[0] in ('=', '+', '-', '@', '\t', '\r'):
+                return f"'{val}"
+            return val
+            
         for s in subnets:
             tags_str = json.dumps(s.tags) if s.tags else ""
-            writer.writerow([
+            row = [
                 s.id, s.name, s.cidr, s.gateway or "", s.vlan_id or "",
                 s.description or "", s.parent_id or "", tags_str
-            ])
+            ]
+            writer.writerow([sanitize(v) for v in row])
             
         return output.getvalue()
 
-    def bulk_import(self, csv_content: str) -> dict:
+    def bulk_import(self, csv_file_obj) -> dict:
         """
-        Import subnets from a CSV string.
-        Automatically sorts by CIDR prefixlen to ensure parents are created before children.
+        Import subnets from a CSV file iteratively.
+        Note: Parents must appear before children in the CSV file.
         """
         import ipaddress
         
-        reader = csv.DictReader(io.StringIO(csv_content))
-        rows = list(reader)
-        
-        # Sort rows by CIDR size (prefixlen ascending -> larger subnets first)
-        def get_prefixlen(row):
-            try:
-                return ipaddress.IPv4Network(row.get("cidr", "").strip(), strict=False).prefixlen
-            except ValueError:
-                return 32 # Push invalid CIDRs to the end so they fail gracefully during creation
-                
-        rows.sort(key=get_prefixlen)
+        reader = csv.DictReader(csv_file_obj)
         
         created_count = 0
         errors = []
         
-        for idx, row in enumerate(rows):
+        for idx, row in enumerate(reader):
             name = row.get("name", "").strip()
             cidr = row.get("cidr", "").strip()
             if not name or not cidr:
@@ -374,7 +384,10 @@ class SubnetService:
                     tags=tags
                 )
                 created_count += 1
+                if created_count % 1000 == 0:
+                    self._db.commit()
             except (SubnetValidationError, SubnetConflictError) as e:
                 errors.append(f"Row {idx+1} ({cidr}): {str(e)}")
                 
+        self._db.commit()
         return {"imported": created_count, "errors": errors}

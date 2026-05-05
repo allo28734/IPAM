@@ -78,13 +78,12 @@ async def import_subnets(service: SubnetServiceDep, file: UploadFile = File(...)
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="File must be a CSV")
         
-    content = await file.read()
-    try:
-        csv_str = content.decode('utf-8-sig') # Handle BOM if present
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid file encoding. Must be UTF-8")
+    if file.size is not None and file.size > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File size exceeds 5MB limit")
         
-    result = service.bulk_import(csv_str)
+    import codecs
+    iterator = codecs.iterdecode(file.file, 'utf-8-sig')
+    result = service.bulk_import(iterator)
     return result
 
 

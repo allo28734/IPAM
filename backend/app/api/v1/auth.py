@@ -235,13 +235,20 @@ async def sso_callback(request: Request, db: DbSession):
             detail="SSO provider did not return an email address",
         )
 
+    # Prevent account hijacking: enforce that the IdP verified the email
+    if not userinfo.get("email_verified", False):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SSO email address is not verified by the IdP.",
+        )
+
     # Delegate to service layer (business logic)
     user = handle_sso_login(db, email, username, user_groups)
 
     # Issue a local IPAM JWT — same as local login
     access_token = create_access_token(data={"sub": user.username})
 
-    # 302 redirect to the frontend SSOSuccess page with the token
-    frontend_url = f"/sso-success?token={access_token}"
+    # 302 redirect to the frontend SSOSuccess page with the token in the URL fragment
+    frontend_url = f"/sso-success#token={access_token}"
     return RedirectResponse(url=frontend_url, status_code=302)
 

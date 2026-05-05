@@ -1,23 +1,25 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import './Login.css';
 
 /**
  * SSOSuccess — handles the OAuth2/OIDC callback redirect.
  *
  * The backend SSO callback redirects here with:
- *   /sso-success?token=<JWT>
+ *   /sso-success#token=<JWT>
  *
  * This component extracts the token, stores it in localStorage
  * (identical to local login), and navigates to the Dashboard.
  */
 function SSOSuccess() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const location = useLocation();
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const token = searchParams.get('token');
+    const hash = location.hash.replace(/^#/, '');
+    const params = new URLSearchParams(hash);
+    const token = params.get('token');
 
     if (token) {
       localStorage.setItem('access_token', token);
@@ -25,7 +27,7 @@ function SSOSuccess() {
     } else {
       setError('SSO authentication failed — no token received.');
     }
-  }, [searchParams, navigate]);
+  }, [location, navigate]);
 
   // Only shown briefly on error; the happy path redirects instantly
   return (

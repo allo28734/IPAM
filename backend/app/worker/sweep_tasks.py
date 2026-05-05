@@ -61,9 +61,9 @@ def run_subnet_sweep(self, subnet_id: int):
             except Exception as e:
                 logger.error(f"Failed to load SNMP credentials for subnet {subnet_id}: {e}")
 
-        # Fetch existing IPs from the DB
-        existing_ips_query = db.query(IPAddress).filter(IPAddress.subnet_id == subnet.id).all()
-        existing_ips_map = {ip.address: ip for ip in existing_ips_query}
+        # Fetch existing IPs from the DB using with_entities to avoid massive ORM bloat
+        existing_ips_query = db.query(IPAddress).with_entities(IPAddress.address, IPAddress.id, IPAddress.status).filter(IPAddress.subnet_id == subnet.id).all()
+        existing_ips_map = {row.address: row for row in existing_ips_query}
 
         conflict_count = 0
         updated_count = 0
@@ -82,7 +82,10 @@ def run_subnet_sweep(self, subnet_id: int):
 
                 if ip_str in existing_ips_map:
                     existing_ip = existing_ips_map[ip_str]
-                    existing_ip.last_seen = datetime.now(timezone.utc)
+                    
+                    # Update last seen directly using an update statement
+                    db.query(IPAddress).filter(IPAddress.id == existing_ip.id).update({"last_seen": datetime.now(timezone.utc)})
+                    
                     updated_count += 1
                     
                     status_update = None
