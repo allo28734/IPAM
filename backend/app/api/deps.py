@@ -100,3 +100,17 @@ SubnetServiceDep = Annotated[SubnetService, Depends(get_subnet_service)]
 IPServiceDep = Annotated[IPAddressService, Depends(get_ip_service)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 CurrentAdmin = Annotated[User, Depends(get_current_active_admin)]
+
+
+from app.models.system_settings import SystemSettings
+
+def get_system_settings(db: DbSession) -> SystemSettings:
+    settings = db.query(SystemSettings).filter(SystemSettings.id == 1).first()
+    if not settings:
+        settings = SystemSettings(id=1)
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+    return settings
+
+SystemSettingsDep = Annotated[SystemSettings, Depends(get_system_settings)]

@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
-from app.api.deps import CurrentAdmin, CurrentUser, DbSession
+from app.api.deps import CurrentAdmin, CurrentUser, DbSession, SystemSettingsDep
 from app.core.config import settings
 from app.models.user import User
 from app.repositories.user_repo import UserRepository
@@ -37,12 +37,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
 
 
-def _sso_is_configured() -> bool:
+def _sso_is_configured(sys_settings) -> bool:
     """Return True only when all required SSO settings are present."""
     return bool(
-        settings.sso_client_id
-        and settings.sso_client_secret
-        and settings.sso_discovery_url
+        sys_settings.sso_client_id
+        and sys_settings.sso_client_secret
+        and sys_settings.sso_discovery_url
     )
 
 
@@ -153,20 +153,20 @@ def register_user(
 
 
 @router.get("/sso/enabled")
-def sso_enabled():
+def sso_enabled(sys_settings: SystemSettingsDep):
     """Public endpoint — tells the frontend whether SSO is configured."""
-    return {"sso_enabled": _sso_is_configured()}
+    return {"sso_enabled": _sso_is_configured(sys_settings)}
 
 
 @router.get("/sso/login")
-async def sso_login(request: Request):
+async def sso_login(request: Request, sys_settings: SystemSettingsDep):
     """
     Initialize the OIDC login flow.
 
     Fetches provider metadata from the Discovery URL, builds an
     authorization redirect, and sends the browser to the IdP.
     """
-    if not _sso_is_configured():
+    if not _sso_is_configured(sys_settings):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="SSO is not configured",
@@ -177,9 +177,9 @@ async def sso_login(request: Request):
     oauth = OAuth()
     oauth.register(
         name="sso",
-        client_id=settings.sso_client_id,
-        client_secret=settings.sso_client_secret,
-        server_metadata_url=settings.sso_discovery_url,
+        client_id=sys_settings.sso_client_id,
+        client_secret=sys_settings.sso_client_secret,
+        server_metadata_url=sys_settings.sso_discovery_url,
         client_kwargs={"scope": "openid email profile"},
     )
 
@@ -188,7 +188,7 @@ async def sso_login(request: Request):
 
 
 @router.get("/sso/callback")
-async def sso_callback(request: Request, db: DbSession):
+async def sso_callback(request: Request, db: DbSession, sys_settings: SystemSettingsDep):
     """
     Handle the OIDC callback from the Identity Provider.
 
@@ -197,7 +197,7 @@ async def sso_callback(request: Request, db: DbSession):
     layer, and returns a 302 redirect to the frontend with the
     JWT in the query string.
     """
-    if not _sso_is_configured():
+    if not _sso_is_configured(sys_settings):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="SSO is not configured",
@@ -208,9 +208,9 @@ async def sso_callback(request: Request, db: DbSession):
     oauth = OAuth()
     oauth.register(
         name="sso",
-        client_id=settings.sso_client_id,
-        client_secret=settings.sso_client_secret,
-        server_metadata_url=settings.sso_discovery_url,
+        client_id=sys_settings.sso_client_id,
+        client_secret=sys_settings.sso_client_secret,
+        server_metadata_url=sys_settings.sso_discovery_url,
         client_kwargs={"scope": "openid email profile"},
     )
 

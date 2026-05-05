@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 
 export default function SetupWizard() {
-  const [formData, setFormData] = useState({ username: '', email: '', password: '', role: 'admin' });
+  const [formData, setFormData] = useState({ username: '', email: '', password: '', role: 'admin', base_domain: window.location.origin });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -19,7 +19,13 @@ export default function SetupWizard() {
 
     try {
       // Register
-      await api.post('/auth/register', formData);
+      const registerData = {
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+        role: formData.role
+      };
+      await api.post('/auth/register', registerData);
 
       // Auto login
       const formDataUrlEncoded = new URLSearchParams();
@@ -32,7 +38,20 @@ export default function SetupWizard() {
         },
       });
 
-      localStorage.setItem('access_token', loginRes.data.access_token);
+      const token = loginRes.data.access_token;
+      localStorage.setItem('access_token', token);
+
+      // Save System Settings (Application Domain)
+      if (formData.base_domain) {
+        await api.put('/system/settings', {
+          base_domain: formData.base_domain
+        }, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+      }
+
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.detail || 'Setup failed. Please try again.');
@@ -49,7 +68,7 @@ export default function SetupWizard() {
             Welcome to IPAM
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Create your Admin Account to get started
+            Complete the Zero-Touch Setup
           </p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
@@ -60,7 +79,7 @@ export default function SetupWizard() {
           )}
           <div className="rounded-md shadow-sm space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700" htmlFor="username">Username</label>
+              <label className="block text-sm font-medium text-gray-700" htmlFor="username">Admin Username</label>
               <input
                 id="username"
                 name="username"
@@ -73,7 +92,7 @@ export default function SetupWizard() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700" htmlFor="email">Email address</label>
+              <label className="block text-sm font-medium text-gray-700" htmlFor="email">Admin Email</label>
               <input
                 id="email"
                 name="email"
@@ -86,7 +105,7 @@ export default function SetupWizard() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700" htmlFor="password">Password</label>
+              <label className="block text-sm font-medium text-gray-700" htmlFor="password">Admin Password</label>
               <input
                 id="password"
                 name="password"
@@ -95,6 +114,21 @@ export default function SetupWizard() {
                 className="appearance-none rounded relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm mt-1"
                 placeholder="Secure password"
                 value={formData.password}
+                onChange={handleChange}
+              />
+            </div>
+            <hr className="my-4" />
+            <div>
+              <label className="block text-sm font-medium text-gray-700" htmlFor="base_domain">Application Domain</label>
+              <p className="text-xs text-gray-500 mb-1">Used for SSO redirects (e.g. https://ipam.local)</p>
+              <input
+                id="base_domain"
+                name="base_domain"
+                type="url"
+                required
+                className="appearance-none rounded relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                placeholder="https://ipam.local"
+                value={formData.base_domain}
                 onChange={handleChange}
               />
             </div>
