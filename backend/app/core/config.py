@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     # Application metadata
     app_title: str = "IPAM — IP Address Management"
-    app_version: str = "3.2.0"
+    app_version: str = "3.3.0"
     debug: bool = True
 
     # Database — PostgreSQL via Docker (see docker-compose.yml)
@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     ]
 
     # JWT / Auth
-    jwt_secret_key: str = "CHANGE-ME-in-production-use-a-real-secret"
+    jwt_secret_key: str
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60
 
@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     # Used for securely encrypting/decrypting SNMP profiles via Fernet.
     # In production, ALWAYS override this via .env using a securely generated key.
     # To generate a key, run: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-    encryption_key: str = "kPZc59k40K0_YcZc0XlB_v2WJ9P6zZf9L6B4yC7a9Gk="
+    encryption_key: str
 
 
 # Singleton instance used across the application

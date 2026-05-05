@@ -134,6 +134,7 @@ class SubnetService:
         description: str | None = None,
         parent_id: int | None = None,
         tags: dict | None = None,
+        existing_subnets: list[Subnet] | None = None,
     ) -> Subnet:
         """
         Create a new subnet after validating all business rules.
@@ -152,17 +153,16 @@ class SubnetService:
 
         # 1.5 SSRF Prevention Blocklist
         import ipaddress
-        if ip_version == 4:
-            blocked_cidrs = [
-                ipaddress.IPv4Network("127.0.0.0/8"),
-                ipaddress.IPv4Network("169.254.169.254/32"),
-                ipaddress.IPv4Network("172.17.0.0/16"),
-            ]
-            for blocked in blocked_cidrs:
-                if network.overlaps(blocked):
-                    raise SubnetValidationError(
-                        f"Creation of subnets overlapping with restricted infrastructure network ({blocked}) is prohibited for security reasons."
-                    )
+        blocked_cidrs_v4 = ["127.0.0.0/8", "169.254.169.254/32", "172.17.0.0/16"]
+        blocked_cidrs_v6 = ["::1/128", "fe80::/10", "fd00:ec2::254/128"]
+        
+        blocked_networks = [ipaddress.ip_network(b) for b in (blocked_cidrs_v4 if ip_version == 4 else blocked_cidrs_v6)]
+
+        for blocked in blocked_networks:
+            if network.overlaps(blocked):
+                raise SubnetValidationError(
+                    f"Creation of subnets overlapping with restricted infrastructure network ({blocked}) is prohibited for security reasons."
+                )
 
         # 2. Parent validation and strict CIDR containment
         if parent_id is not None:
@@ -173,7 +173,8 @@ class SubnetService:
                 )
 
         # 3. Check for overlaps with existing subnets
-        existing_subnets = self._repo.get_all()
+        if existing_subnets is None:
+            existing_subnets = self._repo.get_all()
         for existing in existing_subnets:
             if subnets_overlap(cidr, existing.cidr):
                 # Overlaps are ONLY allowed if the existing subnet is an ancestor of the new subnet
@@ -324,8 +325,10 @@ class SubnetService:
         ])
         
         def sanitize(val):
-            if isinstance(val, str) and val and val[0] in ('=', '+', '-', '@', '\t', '\r'):
-                return f"'{val}"
+            if isinstance(val, str) and val:
+                stripped = val.lstrip()
+                if stripped and stripped[0] in ('=', '+', '-', '@', '\t', '\r'):
+                    return f"'{val}"
             return val
             
         for s in subnets:
@@ -349,6 +352,9 @@ class SubnetService:
         
         created_count = 0
         errors = []
+        
+        # Pre-fetch existing subnets to avoid O(N^2) database queries during import
+        cached_subnets = list(self._repo.get_all())
         
         for idx, row in enumerate(reader):
             name = row.get("name", "").strip()
@@ -374,15 +380,17 @@ class SubnetService:
                     continue
                     
             try:
-                self.create_subnet(
+                created = self.create_subnet(
                     name=name,
                     cidr=cidr,
                     gateway=gateway,
                     vlan_id=vlan_id,
                     description=description,
                     parent_id=parent_id,
-                    tags=tags
+                    tags=tags,
+                    existing_subnets=cached_subnets
                 )
+                cached_subnets.append(created)
                 created_count += 1
                 if created_count % 1000 == 0:
                     self._db.commit()

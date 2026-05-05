@@ -381,8 +381,10 @@ class IPAddressService:
         ])
         
         def sanitize(val):
-            if isinstance(val, str) and val and val[0] in ('=', '+', '-', '@', '\t', '\r'):
-                return f"'{val}"
+            if isinstance(val, str) and val:
+                stripped = val.lstrip()
+                if stripped and stripped[0] in ('=', '+', '-', '@', '\t', '\r'):
+                    return f"'{val}"
             return val
             
         for ip in ips:
