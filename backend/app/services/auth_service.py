@@ -14,10 +14,11 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 from jose import jwt
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.user import User
+from app.models.system_settings import SystemSettings
 from app.repositories.user_repo import UserRepository
 
 
@@ -70,8 +71,8 @@ def create_access_token(
 # ── Authentication ─────────────────────────────────────────────
 
 
-def authenticate_user(
-    db: Session,
+async def authenticate_user(
+    db: AsyncSession,
     username: str,
     password: str,
 ) -> User | None:
@@ -82,33 +83,35 @@ def authenticate_user(
     if the user is not found or the password is incorrect.
     """
     repo = UserRepository(db)
-    user = repo.get_by_username(username)
+    user = await repo.get_by_username(username)
     if not user:
         return None
     if not verify_password(password, user.hashed_password):
         return None
     return user
 
-def is_setup_required(db: Session) -> bool:
+async def is_setup_required(db: AsyncSession) -> bool:
     """Check if the system requires first-run setup (0 users)."""
     repo = UserRepository(db)
-    return repo.count_users() == 0
+    count = await repo.count_users()
+    return count == 0
 
 
 # ── SSO / OIDC ─────────────────────────────────────────────────
 
 
-def handle_sso_login(
-    db: Session,
+async def handle_sso_login(
+    db: AsyncSession,
     email: str,
     username: str,
     user_groups: list[str],
+    sys_settings: SystemSettings,
 ) -> User:
     """
     Provision or update a user from an SSO/OIDC login.
 
     Role evaluation:
-        If settings.sso_admin_group is set and appears in
+        If sys_settings.sso_admin_group is set and appears in
         user_groups, the target role is "admin".
         Otherwise, the target role is "readonly".
 
@@ -125,16 +128,16 @@ def handle_sso_login(
     """
     # Determine target role from IdP groups
     target_role = "readonly"
-    if settings.sso_admin_group and settings.sso_admin_group in user_groups:
+    if sys_settings.sso_admin_group and sys_settings.sso_admin_group in user_groups:
         target_role = "admin"
 
     repo = UserRepository(db)
-    user = repo.get_by_email(email)
+    user = await repo.get_by_email(email)
 
     if user is None:
         # Prevent username collision
         base_username = username
-        while repo.get_by_username(username) is not None:
+        while await repo.get_by_username(username) is not None:
             username = f"{base_username}_{secrets.token_hex(4)}"
 
         # Auto-provision with an impossible random password
@@ -145,13 +148,13 @@ def handle_sso_login(
             hashed_password=hash_password(impossible_password),
             role=target_role,
         )
-        user = repo.create(user)
+        user = await repo.create(user)
     else:
         # Sync role from IdP on every login
         if user.role != target_role:
             user.role = target_role
-            db.commit()
-            db.refresh(user)
+            await db.commit()
+            await db.refresh(user)
 
     return user
 

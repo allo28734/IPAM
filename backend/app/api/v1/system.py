@@ -14,6 +14,7 @@ router = APIRouter(prefix="/system", tags=["system"])
 
 
 class SystemSettingsUpdate(BaseModel):
+    """Payload for updating application-wide system settings."""
     base_domain: str | None = None
     sso_client_id: str | None = None
     sso_client_secret: str | None = None
@@ -23,6 +24,7 @@ class SystemSettingsUpdate(BaseModel):
 
 
 class SystemSettingsResponse(BaseModel):
+    """Response model for system settings. Omits sensitive secrets."""
     base_domain: str | None
     sso_client_id: str | None
     sso_discovery_url: str | None
@@ -32,7 +34,7 @@ class SystemSettingsResponse(BaseModel):
 
 
 @router.get("/settings", response_model=SystemSettingsResponse)
-def get_settings(
+async def get_settings(
     sys_settings: SystemSettingsDep,
     admin: CurrentAdmin,
 ):
@@ -47,7 +49,7 @@ def get_settings(
 
 
 @router.put("/settings", response_model=SystemSettingsResponse)
-def update_settings(
+async def update_settings(
     body: SystemSettingsUpdate,
     db: DbSession,
     sys_settings: SystemSettingsDep,
@@ -68,8 +70,8 @@ def update_settings(
         sys_settings.enable_network_discovery = body.enable_network_discovery
 
     db.add(sys_settings)
-    db.commit()
-    db.refresh(sys_settings)
+    await db.commit()
+    await db.refresh(sys_settings)
 
     return SystemSettingsResponse(
         base_domain=sys_settings.base_domain,
@@ -85,7 +87,7 @@ class FeatureFlagsResponse(BaseModel):
 
 
 @router.get("/features", response_model=FeatureFlagsResponse)
-def get_public_features(
+async def get_public_features(
     sys_settings: SystemSettingsDep,
 ):
     """Get public feature flags (No authentication required)."""

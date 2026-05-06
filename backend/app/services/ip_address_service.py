@@ -18,7 +18,7 @@ import io
 import json
 from datetime import datetime, timezone
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit_log import AuditLog
 from app.models.ip_address import IPAddress
@@ -68,7 +68,7 @@ class SubnetFullError(IPServiceError):
 
 
 # Valid status values
-VALID_STATUSES = {"available", "assigned", "reserved"}
+VALID_STATUSES = {"available", "assigned", "reserved", "conflict"}
 
 
 class IPAddressService:
@@ -78,14 +78,14 @@ class IPAddressService:
     Receives a database session via constructor injection.
     """
 
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: AsyncSession) -> None:
         self._db = db
         self._ip_repo = IPAddressRepository(db)
         self._subnet_repo = SubnetRepository(db)
 
     # ── Queries ─────────────────────────────────────────────────
 
-    def list_ips_in_subnet(
+    async def list_ips_in_subnet(
         self,
         subnet_id: int,
         *,
@@ -94,7 +94,7 @@ class IPAddressService:
         limit: int = 100,
     ) -> list[IPAddress]:
         """List IP addresses in a subnet with optional status filter."""
-        self._ensure_subnet_exists(subnet_id)
+        await self._ensure_subnet_exists(subnet_id)
 
         if status and status not in VALID_STATUSES:
             raise IPValidationError(
@@ -103,27 +103,27 @@ class IPAddressService:
             )
 
         return list(
-            self._ip_repo.get_by_subnet(subnet_id, status=status, skip=skip, limit=limit)
+            await self._ip_repo.get_by_subnet(subnet_id, status=status, skip=skip, limit=limit)
         )
 
-    def get_ip(self, ip_id: int) -> IPAddress:
+    async def get_ip(self, ip_id: int) -> IPAddress:
         """Fetch a single IP address by ID or raise IPNotFoundError."""
-        ip = self._ip_repo.get_by_id(ip_id)
+        ip = await self._ip_repo.get_by_id(ip_id)
         if not ip:
             raise IPNotFoundError(f"IP address with id {ip_id} not found")
         return ip
 
-    def get_total_count(self) -> int:
+    async def get_total_count(self) -> int:
         """Return the total number of IP address records."""
-        return self._ip_repo.count()
+        return await self._ip_repo.count()
 
-    def get_total_count_by_status(self, status: str) -> int:
+    async def get_total_count_by_status(self, status: str) -> int:
         """Return the total count of IPs with a given status."""
-        return self._ip_repo.count_total_by_status(status)
+        return await self._ip_repo.count_total_by_status(status)
 
     # ── Assign / Reserve a specific IP ──────────────────────────
 
-    def assign_ip(
+    async def assign_ip(
         self,
         subnet_id: int,
         *,
@@ -143,7 +143,7 @@ class IPAddressService:
           4. Address must not already be tracked
           5. Status must be a valid value
         """
-        subnet = self._ensure_subnet_exists(subnet_id)
+        subnet = await self._ensure_subnet_exists(subnet_id)
 
         # Validate status
         if status not in VALID_STATUSES:
@@ -173,7 +173,7 @@ class IPAddressService:
             )
 
         # Check for duplicates
-        existing = self._ip_repo.get_by_address(address)
+        existing = await self._ip_repo.get_by_address(address)
         if existing:
             raise IPConflictError(
                 f"Address {address} is already tracked "
@@ -190,9 +190,9 @@ class IPAddressService:
             description=description,
             tags=tags or {},
         )
-        created = self._ip_repo.create(ip)
+        created = await self._ip_repo.create(ip)
 
-        self._log_audit("ip_address", created.id, status, {
+        await self._log_audit("ip_address", created.id, status, {
             "address": address,
             "subnet_id": subnet_id,
             "hostname": hostname,
@@ -202,7 +202,7 @@ class IPAddressService:
 
     # ── Auto-allocate next available ────────────────────────────
 
-    def allocate_next_available(
+    async def allocate_next_available(
         self,
         subnet_id: int,
         *,
@@ -217,7 +217,7 @@ class IPAddressService:
         Uses ip_utils.next_available_ip() to find the first free
         address, skipping the gateway and any already-tracked IPs.
         """
-        subnet = self._ensure_subnet_exists(subnet_id)
+        subnet = await self._ensure_subnet_exists(subnet_id)
 
         if status not in VALID_STATUSES:
             raise IPValidationError(
@@ -225,7 +225,7 @@ class IPAddressService:
                 f"{', '.join(sorted(VALID_STATUSES))}"
             )
 
-        used = self._ip_repo.get_all_addresses_in_subnet(subnet_id)
+        used = await self._ip_repo.get_all_addresses_in_subnet(subnet_id)
         address = next_available_ip(subnet.cidr, used, gateway=subnet.gateway)
 
         if address is None:
@@ -242,9 +242,9 @@ class IPAddressService:
             description=description,
             tags=tags or {},
         )
-        created = self._ip_repo.create(ip)
+        created = await self._ip_repo.create(ip)
 
-        self._log_audit("ip_address", created.id, "auto_allocated", {
+        await self._log_audit("ip_address", created.id, "auto_allocated", {
             "address": address,
             "subnet_id": subnet_id,
             "hostname": hostname,
@@ -254,7 +254,7 @@ class IPAddressService:
 
     # ── Update ──────────────────────────────────────────────────
 
-    def update_ip(
+    async def update_ip(
         self,
         ip_id: int,
         *,
@@ -268,7 +268,7 @@ class IPAddressService:
         tags: dict | None = None,
     ) -> IPAddress:
         """Update IP address metadata and/or status."""
-        ip = self.get_ip(ip_id)
+        ip = await self.get_ip(ip_id)
 
         if status is not None and status not in VALID_STATUSES:
             raise IPValidationError(
@@ -297,29 +297,29 @@ class IPAddressService:
         if not update_data:
             return ip
 
-        updated = self._ip_repo.update(ip, update_data)
+        updated = await self._ip_repo.update(ip, update_data)
 
-        self._log_audit("ip_address", ip_id, "updated", update_data)
+        await self._log_audit("ip_address", ip_id, "updated", update_data)
 
         return updated
 
     # ── Release (soft delete — set status to available) ─────────
 
-    def release_ip(self, ip_id: int) -> IPAddress:
+    async def release_ip(self, ip_id: int) -> IPAddress:
         """
         Release an IP address by setting its status to 'available'
         and clearing the hostname.
         """
-        ip = self.get_ip(ip_id)
+        ip = await self.get_ip(ip_id)
         old_status = ip.status
 
-        updated = self._ip_repo.update(ip, {
+        updated = await self._ip_repo.update(ip, {
             "status": "available",
             "hostname": None,
             "description": None,
         })
 
-        self._log_audit("ip_address", ip_id, "released", {
+        await self._log_audit("ip_address", ip_id, "released", {
             "address": ip.address,
             "previous_status": old_status,
         })
@@ -328,31 +328,31 @@ class IPAddressService:
 
     # ── Hard delete ─────────────────────────────────────────────
 
-    def delete_ip(self, ip_id: int) -> None:
+    async def delete_ip(self, ip_id: int) -> None:
         """Permanently remove an IP address record."""
-        ip = self.get_ip(ip_id)
+        ip = await self.get_ip(ip_id)
         address = ip.address
         subnet_id = ip.subnet_id
 
-        self._ip_repo.delete(ip)
+        await self._ip_repo.delete(ip)
 
-        self._log_audit("ip_address", ip_id, "deleted", {
+        await self._log_audit("ip_address", ip_id, "deleted", {
             "address": address,
             "subnet_id": subnet_id,
         })
 
     # ── Private helpers ─────────────────────────────────────────
 
-    def _ensure_subnet_exists(self, subnet_id: int):
+    async def _ensure_subnet_exists(self, subnet_id: int):
         """Fetch a subnet or raise SubnetNotFoundError."""
-        subnet = self._subnet_repo.get_by_id(subnet_id)
+        subnet = await self._subnet_repo.get_by_id(subnet_id)
         if not subnet:
             raise SubnetNotFoundError(
                 f"Subnet with id {subnet_id} not found"
             )
         return subnet
 
-    def _log_audit(
+    async def _log_audit(
         self, entity_type: str, entity_id: int, action: str, details: dict
     ) -> None:
         """Append an entry to the audit log."""
@@ -364,13 +364,13 @@ class IPAddressService:
             timestamp=datetime.now(timezone.utc),
         )
         self._db.add(log)
-        self._db.commit()
+        await self._db.commit()
 
     # ── Bulk Operations ──────────────────────────────────────────
 
-    def export_csv(self, subnet_id: int) -> str:
+    async def export_csv(self, subnet_id: int) -> str:
         """Export all IPs in a subnet to a CSV string."""
-        ips = self.list_ips_in_subnet(subnet_id, limit=100000)
+        ips = await self.list_ips_in_subnet(subnet_id, limit=100000)
         output = io.StringIO()
         writer = csv.writer(output)
         
@@ -397,7 +397,7 @@ class IPAddressService:
             
         return output.getvalue()
 
-    def bulk_import(self, subnet_id: int, csv_file_obj) -> dict:
+    async def bulk_import(self, subnet_id: int, csv_file_obj) -> dict:
         """
         Import IP addresses from a CSV file into a specific subnet iteratively.
         """
@@ -426,7 +426,7 @@ class IPAddressService:
                     continue
                     
             try:
-                self.assign_ip(
+                await self.assign_ip(
                     subnet_id=subnet_id,
                     address=address,
                     status=status,
@@ -436,9 +436,9 @@ class IPAddressService:
                 )
                 created_count += 1
                 if created_count % 1000 == 0:
-                    self._db.commit()
+                    await self._db.commit()
             except (IPValidationError, IPConflictError, SubnetNotFoundError) as e:
                 errors.append(f"Row {idx+1} ({address}): {str(e)}")
                 
-        self._db.commit()
+        await self._db.commit()
         return {"imported": created_count, "errors": errors}

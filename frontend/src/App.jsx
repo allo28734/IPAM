@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useNavigate } from 'react-router-dom';
 import Layout from './components/Layout/Layout';
-import api from './utils/api';
+import api from './lib/axios';
 
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
@@ -10,6 +10,7 @@ import SubnetDetail from './pages/SubnetDetail';
 import AuditLog from './pages/AuditLog';
 import SetupWizard from './pages/SetupWizard';
 import SSOSuccess from './pages/SSOSuccess';
+import DiscoveryProfiles from './pages/DiscoveryProfiles';
 
 function SetupCheck({ children }) {
   const [checking, setChecking] = useState(true);
@@ -69,6 +70,7 @@ function App() {
               <Route path="/subnets" element={<Subnets />} />
               <Route path="/subnets/:id" element={<SubnetDetail />} />
               <Route path="/audit" element={<AuditLog />} />
+              <Route path="/discovery-profiles" element={<DiscoveryProfiles />} />
             </Route>
           </Route>
         </Routes>

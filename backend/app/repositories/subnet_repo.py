@@ -8,7 +8,7 @@ CIDR lookup and overlap checking. Contains NO business logic.
 from typing import Sequence
 
 from sqlalchemy import select, text
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.subnet import Subnet
 from app.repositories.base import BaseRepository
@@ -17,20 +17,22 @@ from app.repositories.base import BaseRepository
 class SubnetRepository(BaseRepository[Subnet]):
     """Data-access operations specific to the Subnet model."""
 
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: AsyncSession) -> None:
         super().__init__(Subnet, db)
 
-    def get_by_cidr(self, cidr: str) -> Subnet | None:
+    async def get_by_cidr(self, cidr: str) -> Subnet | None:
         """Find a subnet by its exact CIDR notation."""
         stmt = select(Subnet).where(Subnet.cidr == cidr)
-        return self._db.scalars(stmt).first()
+        result = await self._db.scalars(stmt)
+        return result.first()
 
-    def get_by_name(self, name: str) -> Subnet | None:
+    async def get_by_name(self, name: str) -> Subnet | None:
         """Find a subnet by its exact name."""
         stmt = select(Subnet).where(Subnet.name == name)
-        return self._db.scalars(stmt).first()
+        result = await self._db.scalars(stmt)
+        return result.first()
 
-    def search(self, query: str, *, skip: int = 0, limit: int = 100) -> Sequence[Subnet]:
+    async def search(self, query: str, *, skip: int = 0, limit: int = 100) -> Sequence[Subnet]:
         """
         Search subnets by partial match on name, CIDR, or description.
 
@@ -47,9 +49,10 @@ class SubnetRepository(BaseRepository[Subnet]):
             .offset(skip)
             .limit(limit)
         )
-        return self._db.scalars(stmt).all()
+        result = await self._db.scalars(stmt)
+        return result.all()
 
-    def get_all_cidrs(self) -> list[str]:
+    async def get_all_cidrs(self) -> list[str]:
         """
         Return all existing CIDR strings.
 
@@ -58,9 +61,10 @@ class SubnetRepository(BaseRepository[Subnet]):
         not here).
         """
         stmt = select(Subnet.cidr)
-        return list(self._db.scalars(stmt).all())
+        result = await self._db.scalars(stmt)
+        return list(result.all())
 
-    def find_overlapping(self, cidr: str) -> Sequence[Subnet]:
+    async def find_overlapping(self, cidr: str) -> Sequence[Subnet]:
         """
         Return all existing subnets whose CIDR overlaps with the given CIDR.
 
@@ -72,12 +76,11 @@ class SubnetRepository(BaseRepository[Subnet]):
             "SELECT id FROM subnets WHERE cidr::inet <<= :cidr::inet "
             "OR cidr::inet >>= :cidr::inet"
         )
-        result = self._db.execute(stmt, {"cidr": cidr})
+        result = await self._db.execute(stmt, {"cidr": cidr})
         overlapping_ids = [row[0] for row in result]
         if not overlapping_ids:
             return []
-        return list(
-            self._db.scalars(
-                select(Subnet).where(Subnet.id.in_(overlapping_ids))
-            ).all()
-        )
+            
+        stmt2 = select(Subnet).where(Subnet.id.in_(overlapping_ids))
+        result2 = await self._db.scalars(stmt2)
+        return list(result2.all())

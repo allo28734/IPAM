@@ -36,7 +36,7 @@ router = APIRouter(
     "/subnets/{subnet_id}/ips",
     response_model=IPAddressListResponse,
 )
-def list_ips_in_subnet(
+async def list_ips_in_subnet(
     subnet_id: int,
     service: IPServiceDep,
     status_filter: str | None = Query(None, alias="status", max_length=20),
@@ -45,7 +45,7 @@ def list_ips_in_subnet(
 ):
     """List all IP addresses in a subnet with optional status filter."""
     try:
-        items = service.list_ips_in_subnet(
+        items = await service.list_ips_in_subnet(
             subnet_id, status=status_filter, skip=skip, limit=limit
         )
     except SubnetNotFoundError as exc:
@@ -63,10 +63,10 @@ def list_ips_in_subnet(
 
 
 @router.get("/subnets/{subnet_id}/ips/export", response_class=Response)
-def export_ips(subnet_id: int, service: IPServiceDep):
+async def export_ips(subnet_id: int, service: IPServiceDep):
     """Export all IPs in a subnet as CSV."""
     try:
-        csv_data = service.export_csv(subnet_id)
+        csv_data = await service.export_csv(subnet_id)
     except SubnetNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
         
@@ -88,7 +88,7 @@ async def import_ips(subnet_id: int, service: IPServiceDep, file: UploadFile = F
         
     import codecs
     iterator = codecs.iterdecode(file.file, 'utf-8-sig')
-    result = service.bulk_import(subnet_id, iterator)
+    result = await service.bulk_import(subnet_id, iterator)
     return result
 
 
@@ -101,10 +101,10 @@ async def import_ips(subnet_id: int, service: IPServiceDep, file: UploadFile = F
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(get_current_active_admin)],
 )
-def assign_ip(subnet_id: int, body: IPAddressCreate, service: IPServiceDep):
+async def assign_ip(subnet_id: int, body: IPAddressCreate, service: IPServiceDep):
     """Assign or reserve a specific IP address in a subnet."""
     try:
-        ip = service.assign_ip(
+        ip = await service.assign_ip(
             subnet_id,
             address=body.address,
             status=body.status,
@@ -131,12 +131,12 @@ def assign_ip(subnet_id: int, body: IPAddressCreate, service: IPServiceDep):
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(get_current_active_admin)],
 )
-def allocate_next_available(
+async def allocate_next_available(
     subnet_id: int, body: IPAddressAllocate, service: IPServiceDep
 ):
     """Automatically allocate the next available IP in a subnet."""
     try:
-        ip = service.allocate_next_available(
+        ip = await service.allocate_next_available(
             subnet_id,
             status=body.status,
             hostname=body.hostname,
@@ -157,10 +157,10 @@ def allocate_next_available(
 
 
 @router.put("/ips/{ip_id}", response_model=IPAddressResponse, dependencies=[Depends(get_current_active_admin)])
-def update_ip(ip_id: int, body: IPAddressUpdate, service: IPServiceDep):
+async def update_ip(ip_id: int, body: IPAddressUpdate, service: IPServiceDep):
     """Update IP address metadata (status, hostname, description)."""
     try:
-        ip = service.update_ip(
+        ip = await service.update_ip(
             ip_id,
             status=body.status,
             hostname=body.hostname,
@@ -179,10 +179,10 @@ def update_ip(ip_id: int, body: IPAddressUpdate, service: IPServiceDep):
 
 
 @router.post("/ips/{ip_id}/release", response_model=IPAddressResponse, dependencies=[Depends(get_current_active_admin)])
-def release_ip(ip_id: int, service: IPServiceDep):
+async def release_ip(ip_id: int, service: IPServiceDep):
     """Release an IP address (set status to 'available', clear hostname)."""
     try:
-        ip = service.release_ip(ip_id)
+        ip = await service.release_ip(ip_id)
     except IPNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
@@ -193,9 +193,9 @@ def release_ip(ip_id: int, service: IPServiceDep):
 
 
 @router.delete("/ips/{ip_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(get_current_active_admin)])
-def delete_ip(ip_id: int, service: IPServiceDep):
+async def delete_ip(ip_id: int, service: IPServiceDep):
     """Permanently remove an IP address record."""
     try:
-        service.delete_ip(ip_id)
+        await service.delete_ip(ip_id)
     except IPNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))

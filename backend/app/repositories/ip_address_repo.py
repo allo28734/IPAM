@@ -9,7 +9,7 @@ Contains NO business logic.
 from typing import Sequence
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ip_address import IPAddress
 from app.repositories.base import BaseRepository
@@ -18,15 +18,16 @@ from app.repositories.base import BaseRepository
 class IPAddressRepository(BaseRepository[IPAddress]):
     """Data-access operations specific to the IPAddress model."""
 
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: AsyncSession) -> None:
         super().__init__(IPAddress, db)
 
-    def get_by_address(self, address: str) -> IPAddress | None:
+    async def get_by_address(self, address: str) -> IPAddress | None:
         """Find an IP by its exact address string."""
         stmt = select(IPAddress).where(IPAddress.address == address)
-        return self._db.scalars(stmt).first()
+        result = await self._db.scalars(stmt)
+        return result.first()
 
-    def get_by_subnet(
+    async def get_by_subnet(
         self,
         subnet_id: int,
         *,
@@ -43,18 +44,20 @@ class IPAddressRepository(BaseRepository[IPAddress]):
         if status:
             stmt = stmt.where(IPAddress.status == status)
         stmt = stmt.offset(skip).limit(limit)
-        return self._db.scalars(stmt).all()
+        result = await self._db.scalars(stmt)
+        return result.all()
 
-    def count_by_subnet(self, subnet_id: int) -> int:
+    async def count_by_subnet(self, subnet_id: int) -> int:
         """Total number of IP records in a given subnet."""
         stmt = (
             select(func.count())
             .select_from(IPAddress)
             .where(IPAddress.subnet_id == subnet_id)
         )
-        return self._db.scalar(stmt) or 0
+        result = await self._db.scalar(stmt)
+        return result or 0
 
-    def count_by_subnet_and_status(self, subnet_id: int, status: str) -> int:
+    async def count_by_subnet_and_status(self, subnet_id: int, status: str) -> int:
         """Count IPs in a subnet with a specific status."""
         stmt = (
             select(func.count())
@@ -64,9 +67,10 @@ class IPAddressRepository(BaseRepository[IPAddress]):
                 IPAddress.status == status,
             )
         )
-        return self._db.scalar(stmt) or 0
+        result = await self._db.scalar(stmt)
+        return result or 0
 
-    def get_all_addresses_in_subnet(self, subnet_id: int) -> list[str]:
+    async def get_all_addresses_in_subnet(self, subnet_id: int) -> list[str]:
         """
         Return all IP address strings in a subnet.
 
@@ -75,13 +79,15 @@ class IPAddressRepository(BaseRepository[IPAddress]):
         not here.
         """
         stmt = select(IPAddress.address).where(IPAddress.subnet_id == subnet_id)
-        return list(self._db.scalars(stmt).all())
+        result = await self._db.scalars(stmt)
+        return list(result.all())
 
-    def count_total_by_status(self, status: str) -> int:
+    async def count_total_by_status(self, status: str) -> int:
         """Count all IPs across all subnets with a given status."""
         stmt = (
             select(func.count())
             .select_from(IPAddress)
             .where(IPAddress.status == status)
         )
-        return self._db.scalar(stmt) or 0
+        result = await self._db.scalar(stmt)
+        return result or 0

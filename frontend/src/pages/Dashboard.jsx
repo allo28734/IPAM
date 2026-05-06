@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Network, Server, HardDrive, Activity } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import api from '../lib/axios';
 
 const Dashboard = () => {
@@ -101,12 +102,12 @@ const Dashboard = () => {
           <div className="glass-card">
             <h2 style={{ marginBottom: '16px', fontSize: '1.1rem' }}>Quick Actions</h2>
             <div style={{ display: 'flex', gap: '16px' }}>
-              <a href="/subnets" className="btn btn-primary">
+              <Link to="/subnets" className="btn btn-primary">
                 <Network size={16} /> Manage Subnets
-              </a>
-              <a href="/audit" className="btn btn-secondary">
+              </Link>
+              <Link to="/audit" className="btn btn-secondary">
                 <Activity size={16} /> View Audit Log
-              </a>
+              </Link>
             </div>
           </div>
         </>

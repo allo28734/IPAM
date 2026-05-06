@@ -12,7 +12,7 @@ It must NOT contain business rules, validation logic, or HTTP concepts.
 from typing import Generic, TypeVar, Type, Sequence
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import Base
 
@@ -26,21 +26,21 @@ class BaseRepository(Generic[ModelType]):
 
     Usage:
         class SubnetRepo(BaseRepository[Subnet]):
-            def __init__(self, db: Session):
+            def __init__(self, db: AsyncSession):
                 super().__init__(Subnet, db)
     """
 
-    def __init__(self, model: Type[ModelType], db: Session) -> None:
+    def __init__(self, model: Type[ModelType], db: AsyncSession) -> None:
         self._model = model
         self._db = db
 
     # ── Read ────────────────────────────────────────────────────
 
-    def get_by_id(self, entity_id: int) -> ModelType | None:
+    async def get_by_id(self, entity_id: int) -> ModelType | None:
         """Fetch a single record by primary key, or None if not found."""
-        return self._db.get(self._model, entity_id)
+        return await self._db.get(self._model, entity_id)
 
-    def get_all(
+    async def get_all(
         self,
         *,
         skip: int = 0,
@@ -48,27 +48,29 @@ class BaseRepository(Generic[ModelType]):
     ) -> Sequence[ModelType]:
         """Fetch a paginated list of records."""
         stmt = select(self._model).offset(skip).limit(limit)
-        return self._db.scalars(stmt).all()
+        result = await self._db.scalars(stmt)
+        return result.all()
 
-    def count(self) -> int:
+    async def count(self) -> int:
         """Return total number of records for this model."""
         from sqlalchemy import func
 
         stmt = select(func.count()).select_from(self._model)
-        return self._db.scalar(stmt) or 0
+        result = await self._db.scalar(stmt)
+        return result or 0
 
     # ── Create ──────────────────────────────────────────────────
 
-    def create(self, entity: ModelType) -> ModelType:
+    async def create(self, entity: ModelType) -> ModelType:
         """Add a new record to the database."""
         self._db.add(entity)
-        self._db.commit()
-        self._db.refresh(entity)
+        await self._db.commit()
+        await self._db.refresh(entity)
         return entity
 
     # ── Update ──────────────────────────────────────────────────
 
-    def update(self, entity: ModelType, update_data: dict) -> ModelType:
+    async def update(self, entity: ModelType, update_data: dict) -> ModelType:
         """
         Apply a dictionary of changes to an existing record.
 
@@ -78,13 +80,13 @@ class BaseRepository(Generic[ModelType]):
         for key, value in update_data.items():
             if hasattr(entity, key):
                 setattr(entity, key, value)
-        self._db.commit()
-        self._db.refresh(entity)
+        await self._db.commit()
+        await self._db.refresh(entity)
         return entity
 
     # ── Delete ──────────────────────────────────────────────────
 
-    def delete(self, entity: ModelType) -> None:
+    async def delete(self, entity: ModelType) -> None:
         """Remove a record from the database."""
-        self._db.delete(entity)
-        self._db.commit()
+        await self._db.delete(entity)
+        await self._db.commit()

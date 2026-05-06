@@ -7,20 +7,23 @@ the secure encryption/decryption of SNMP passwords.
 
 from typing import List, Optional
 from cryptography.fernet import Fernet
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.discovery_profile import DiscoveryProfile
 from app.schemas.discovery_profile import DiscoveryProfileCreate, DiscoveryProfileUpdate
 
 class DiscoveryProfileServiceError(Exception):
+    """Base exception for discovery profile service errors."""
     pass
 
 class DiscoveryProfileNotFoundError(DiscoveryProfileServiceError):
+    """Raised when a discovery profile is not found."""
     pass
 
 class DiscoveryProfileService:
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self._db = db
         self._fernet = Fernet(settings.encryption_key.encode())
 
@@ -34,8 +37,10 @@ class DiscoveryProfileService:
             return None
         return self._fernet.decrypt(encrypted_text.encode()).decode()
 
-    def create_profile(self, profile_in: DiscoveryProfileCreate) -> DiscoveryProfile:
-        existing = self._db.query(DiscoveryProfile).filter(DiscoveryProfile.name == profile_in.name).first()
+    async def create_profile(self, profile_in: DiscoveryProfileCreate) -> DiscoveryProfile:
+        stmt = select(DiscoveryProfile).where(DiscoveryProfile.name == profile_in.name)
+        result = await self._db.scalars(stmt)
+        existing = result.first()
         if existing:
             raise DiscoveryProfileServiceError(f"Profile with name '{profile_in.name}' already exists.")
 
@@ -48,19 +53,19 @@ class DiscoveryProfileService:
             priv_password=self._encrypt(profile_in.priv_password)
         )
         self._db.add(profile)
-        self._db.commit()
-        self._db.refresh(profile)
+        await self._db.commit()
+        await self._db.refresh(profile)
         return profile
 
-    def get_profile(self, profile_id: int) -> DiscoveryProfile:
-        profile = self._db.query(DiscoveryProfile).filter(DiscoveryProfile.id == profile_id).first()
+    async def get_profile(self, profile_id: int) -> DiscoveryProfile:
+        profile = await self._db.get(DiscoveryProfile, profile_id)
         if not profile:
             raise DiscoveryProfileNotFoundError(f"DiscoveryProfile {profile_id} not found.")
         return profile
 
-    def get_decrypted_credentials(self, profile_id: int) -> dict:
+    async def get_decrypted_credentials(self, profile_id: int) -> dict:
         """Returns a dict with decrypted credentials for the worker."""
-        profile = self.get_profile(profile_id)
+        profile = await self.get_profile(profile_id)
         return {
             "username": profile.username,
             "auth_protocol": profile.auth_protocol,
@@ -69,11 +74,13 @@ class DiscoveryProfileService:
             "priv_password": self._decrypt(profile.priv_password)
         }
 
-    def list_profiles(self, skip: int = 0, limit: int = 100) -> List[DiscoveryProfile]:
-        return self._db.query(DiscoveryProfile).offset(skip).limit(limit).all()
+    async def list_profiles(self, skip: int = 0, limit: int = 100) -> List[DiscoveryProfile]:
+        stmt = select(DiscoveryProfile).offset(skip).limit(limit)
+        result = await self._db.scalars(stmt)
+        return list(result.all())
 
-    def update_profile(self, profile_id: int, profile_in: DiscoveryProfileUpdate) -> DiscoveryProfile:
-        profile = self.get_profile(profile_id)
+    async def update_profile(self, profile_id: int, profile_in: DiscoveryProfileUpdate) -> DiscoveryProfile:
+        profile = await self.get_profile(profile_id)
         
         update_data = profile_in.model_dump(exclude_unset=True)
         
@@ -85,11 +92,11 @@ class DiscoveryProfileService:
         for field, value in update_data.items():
             setattr(profile, field, value)
             
-        self._db.commit()
-        self._db.refresh(profile)
+        await self._db.commit()
+        await self._db.refresh(profile)
         return profile
 
-    def delete_profile(self, profile_id: int) -> None:
-        profile = self.get_profile(profile_id)
-        self._db.delete(profile)
-        self._db.commit()
+    async def delete_profile(self, profile_id: int) -> None:
+        profile = await self.get_profile(profile_id)
+        await self._db.delete(profile)
+        await self._db.commit()

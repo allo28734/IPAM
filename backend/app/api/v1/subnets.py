@@ -43,15 +43,15 @@ router = APIRouter(
 
 
 @router.get("", response_model=SubnetListResponse)
-def list_subnets(
+async def list_subnets(
     service: SubnetServiceDep,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     search: str | None = Query(None, max_length=255),
 ):
     """List all subnets with optional search and pagination."""
-    items = service.list_subnets(skip=skip, limit=limit, search=search)
-    total = service.get_total_count()
+    items = await service.list_subnets(skip=skip, limit=limit, search=search)
+    total = await service.get_total_count()
     return SubnetListResponse(
         items=[SubnetResponse.model_validate(s) for s in items],
         total=total,
@@ -62,9 +62,9 @@ def list_subnets(
 
 
 @router.get("/export", response_class=Response)
-def export_subnets(service: SubnetServiceDep):
+async def export_subnets(service: SubnetServiceDep):
     """Export all subnets as CSV."""
-    csv_data = service.export_csv()
+    csv_data = await service.export_csv()
     return Response(
         content=csv_data,
         media_type="text/csv",
@@ -81,7 +81,6 @@ async def import_subnets(file: UploadFile = File(...)):
     if file.size is not None and file.size > 5 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File size exceeds 5MB limit")
 
-    import codecs
     from app.worker.import_tasks import run_bulk_subnet_import
 
     # Read the file content into a string for Celery serialization
@@ -107,10 +106,10 @@ def get_import_status(task_id: str):
 
 
 @router.post("", response_model=SubnetResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(get_current_active_admin)])
-def create_subnet(body: SubnetCreate, service: SubnetServiceDep):
+async def create_subnet(body: SubnetCreate, service: SubnetServiceDep):
     """Create a new subnet."""
     try:
-        subnet = service.create_subnet(
+        subnet = await service.create_subnet(
             name=body.name,
             cidr=body.cidr,
             gateway=body.gateway,
@@ -131,10 +130,10 @@ def create_subnet(body: SubnetCreate, service: SubnetServiceDep):
 
 
 @router.get("/{subnet_id}", response_model=SubnetResponse)
-def get_subnet(subnet_id: int, service: SubnetServiceDep):
+async def get_subnet(subnet_id: int, service: SubnetServiceDep):
     """Get a single subnet by ID."""
     try:
-        subnet = service.get_subnet(subnet_id)
+        subnet = await service.get_subnet(subnet_id)
     except SubnetNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
@@ -145,10 +144,10 @@ def get_subnet(subnet_id: int, service: SubnetServiceDep):
 
 
 @router.put("/{subnet_id}", response_model=SubnetResponse, dependencies=[Depends(get_current_active_admin)])
-def update_subnet(subnet_id: int, body: SubnetUpdate, service: SubnetServiceDep):
+async def update_subnet(subnet_id: int, body: SubnetUpdate, service: SubnetServiceDep):
     """Update subnet metadata (name, gateway, vlan, description)."""
     try:
-        subnet = service.update_subnet(
+        subnet = await service.update_subnet(
             subnet_id,
             name=body.name,
             gateway=body.gateway,
@@ -169,10 +168,10 @@ def update_subnet(subnet_id: int, body: SubnetUpdate, service: SubnetServiceDep)
 
 
 @router.delete("/{subnet_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(get_current_active_admin)])
-def delete_subnet(subnet_id: int, service: SubnetServiceDep):
+async def delete_subnet(subnet_id: int, service: SubnetServiceDep):
     """Delete a subnet and all its associated IP addresses."""
     try:
-        service.delete_subnet(subnet_id)
+        await service.delete_subnet(subnet_id)
     except SubnetNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
@@ -181,10 +180,10 @@ def delete_subnet(subnet_id: int, service: SubnetServiceDep):
 
 
 @router.get("/{subnet_id}/utilization", response_model=SubnetUtilization)
-def get_utilization(subnet_id: int, service: SubnetServiceDep):
+async def get_utilization(subnet_id: int, service: SubnetServiceDep):
     """Get utilization statistics for a subnet."""
     try:
-        stats = service.get_utilization(subnet_id)
+        stats = await service.get_utilization(subnet_id)
     except SubnetNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
@@ -198,11 +197,11 @@ def get_utilization(subnet_id: int, service: SubnetServiceDep):
 async def sweep_subnet_endpoint(subnet_id: int, service: SubnetServiceDep):
     """Trigger a background ICMP ping sweep for a subnet using Celery."""
     try:
-        subnet = service.get_subnet(subnet_id)
+        subnet = await service.get_subnet(subnet_id)
     except SubnetNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
         
-    network = ipaddress.IPv4Network(subnet.cidr, strict=False)
+    network = ipaddress.ip_network(subnet.cidr, strict=False)
     if network.num_addresses > 2048:
         raise HTTPException(
             status_code=400, 

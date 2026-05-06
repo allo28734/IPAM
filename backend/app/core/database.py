@@ -6,17 +6,18 @@ All repository classes receive a session via dependency injection —
 they never create their own connections.
 """
 
-from sqlalchemy import create_engine, MetaData
+from sqlalchemy import MetaData
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from app.core.config import settings
 
-engine = create_engine(
+engine = create_async_engine(
     settings.database_url,
     echo=settings.debug,
 )
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(bind=engine, class_=AsyncSession, autocommit=False, autoflush=False, expire_on_commit=False)
 
 
 naming_convention = {
@@ -33,15 +34,12 @@ class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=naming_convention)
 
 
-def get_db():
+async def get_db():
     """
     FastAPI dependency that yields a database session.
 
     The session is automatically closed after the request completes,
     regardless of whether an exception occurred.
     """
-    db = SessionLocal()
-    try:
+    async with SessionLocal() as db:
         yield db
-    finally:
-        db.close()

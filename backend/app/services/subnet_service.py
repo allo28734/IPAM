@@ -20,7 +20,7 @@ import io
 import json
 from datetime import datetime, timezone
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit_log import AuditLog
 from app.models.subnet import Subnet
@@ -71,38 +71,38 @@ class SubnetService:
     the repository for persistence.
     """
 
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: AsyncSession) -> None:
         self._db = db
         self._repo = SubnetRepository(db)
         self._ip_repo = IPAddressRepository(db)
 
     # ── Queries ─────────────────────────────────────────────────
 
-    def list_subnets(
+    async def list_subnets(
         self, *, skip: int = 0, limit: int = 100, search: str | None = None
     ) -> list[Subnet]:
         """List subnets with optional search filtering."""
         if search:
-            return list(self._repo.search(search, skip=skip, limit=limit))
-        return list(self._repo.get_all(skip=skip, limit=limit))
+            return list(await self._repo.search(search, skip=skip, limit=limit))
+        return list(await self._repo.get_all(skip=skip, limit=limit))
 
-    def get_subnet(self, subnet_id: int) -> Subnet:
+    async def get_subnet(self, subnet_id: int) -> Subnet:
         """Fetch a single subnet by ID or raise SubnetNotFoundError."""
-        subnet = self._repo.get_by_id(subnet_id)
+        subnet = await self._repo.get_by_id(subnet_id)
         if not subnet:
             raise SubnetNotFoundError(f"Subnet with id {subnet_id} not found")
         return subnet
 
-    def get_utilization(self, subnet_id: int) -> dict:
+    async def get_utilization(self, subnet_id: int) -> dict:
         """
         Compute utilization statistics for a subnet.
 
         Returns a dict with total_capacity, used_count, available_count,
         utilization_percent, and host range info.
         """
-        subnet = self.get_subnet(subnet_id)
+        subnet = await self.get_subnet(subnet_id)
         total = get_subnet_capacity(subnet.cidr)
-        used = self._ip_repo.count_by_subnet(subnet_id)
+        used = await self._ip_repo.count_by_subnet(subnet_id)
         available = total - used
         pct = calculate_utilization(used, subnet.cidr)
         first_ip, last_ip, _ = get_usable_host_range(subnet.cidr)
@@ -118,13 +118,13 @@ class SubnetService:
             "last_usable_ip": last_ip,
         }
 
-    def get_total_count(self) -> int:
+    async def get_total_count(self) -> int:
         """Return the total number of subnets."""
-        return self._repo.count()
+        return await self._repo.count()
 
     # ── Mutations ───────────────────────────────────────────────
 
-    def create_subnet(
+    async def create_subnet(
         self,
         *,
         name: str,
@@ -183,7 +183,7 @@ class SubnetService:
 
         # 2. Parent validation and strict CIDR containment
         if parent_id is not None:
-            parent = self.get_subnet(parent_id)
+            parent = await self.get_subnet(parent_id)
             if not is_subnet_of(cidr, parent.cidr):
                 raise SubnetValidationError(
                     f"Child subnet {cidr} must be strictly contained within parent {parent.cidr}"
@@ -197,7 +197,7 @@ class SubnetService:
                 s for s in existing_subnets if subnets_overlap(cidr, s.cidr)
             ]
         else:
-            overlapping = self._repo.find_overlapping(cidr)
+            overlapping = await self._repo.find_overlapping(cidr)
 
         for existing in overlapping:
             # Overlaps are ONLY allowed if the existing subnet is an ancestor
@@ -207,7 +207,7 @@ class SubnetService:
                 if curr_parent_id == existing.id:
                     is_ancestor = True
                     break
-                curr_parent = self.get_subnet(curr_parent_id)
+                curr_parent = await self.get_subnet(curr_parent_id)
                 curr_parent_id = curr_parent.parent_id
 
             if not is_ancestor:
@@ -232,16 +232,16 @@ class SubnetService:
             parent_id=parent_id,
             tags=tags or {},
         )
-        created = self._repo.create(subnet)
+        created = await self._repo.create(subnet)
 
         # Audit
-        self._log_audit("subnet", created.id, "created", {
+        await self._log_audit("subnet", created.id, "created", {
             "name": name, "cidr": cidr, "gateway": gateway, "parent_id": parent_id
         })
 
         return created
 
-    def update_subnet(
+    async def update_subnet(
         self,
         subnet_id: int,
         *,
@@ -258,7 +258,7 @@ class SubnetService:
         Note: CIDR cannot be changed after creation — that would
         invalidate all associated IP addresses.
         """
-        subnet = self.get_subnet(subnet_id)
+        subnet = await self.get_subnet(subnet_id)
 
         # Validate new gateway if provided
         if gateway is not None and gateway and not is_ip_in_subnet(gateway, subnet.cidr):
@@ -282,7 +282,7 @@ class SubnetService:
         if parent_id is not None:
             if parent_id == subnet_id:
                 raise SubnetValidationError("A subnet cannot be its own parent")
-            parent = self.get_subnet(parent_id)
+            parent = await self.get_subnet(parent_id)
             if not is_subnet_of(subnet.cidr, parent.cidr):
                 raise SubnetValidationError(
                     f"Subnet {subnet.cidr} is not strictly contained within new parent {parent.cidr}"
@@ -297,29 +297,29 @@ class SubnetService:
         if not update_data:
             return subnet
 
-        updated = self._repo.update(subnet, update_data)
+        updated = await self._repo.update(subnet, update_data)
 
-        self._log_audit("subnet", subnet_id, "updated", update_data)
+        await self._log_audit("subnet", subnet_id, "updated", update_data)
 
         return updated
 
-    def delete_subnet(self, subnet_id: int) -> None:
+    async def delete_subnet(self, subnet_id: int) -> None:
         """
         Delete a subnet and all its associated IP addresses (cascade).
         """
-        subnet = self.get_subnet(subnet_id)
+        subnet = await self.get_subnet(subnet_id)
         cidr = subnet.cidr
         name = subnet.name
 
-        self._repo.delete(subnet)
+        await self._repo.delete(subnet)
 
-        self._log_audit("subnet", subnet_id, "deleted", {
+        await self._log_audit("subnet", subnet_id, "deleted", {
             "name": name, "cidr": cidr,
         })
 
     # ── Audit helper ────────────────────────────────────────────
 
-    def _log_audit(
+    async def _log_audit(
         self, entity_type: str, entity_id: int, action: str, details: dict
     ) -> None:
         """Append an entry to the audit log."""
@@ -331,13 +331,13 @@ class SubnetService:
             timestamp=datetime.now(timezone.utc),
         )
         self._db.add(log)
-        self._db.commit()
+        await self._db.commit()
 
     # ── Bulk Operations ──────────────────────────────────────────
 
-    def export_csv(self) -> str:
+    async def export_csv(self) -> str:
         """Export all subnets to a CSV string."""
-        subnets = self.list_subnets(limit=100000)
+        subnets = await self.list_subnets(limit=100000)
         output = io.StringIO()
         writer = csv.writer(output)
         
@@ -367,7 +367,7 @@ class SubnetService:
     # Maximum number of rows allowed per CSV import to prevent DoS
     MAX_IMPORT_ROWS = 1000
 
-    def bulk_import(self, csv_file_obj) -> dict:
+    async def bulk_import(self, csv_file_obj) -> dict:
         """
         Import subnets from a CSV file iteratively.
 
@@ -417,7 +417,7 @@ class SubnetService:
             try:
                 # Overlap detection now delegated to PostgreSQL
                 # (no existing_subnets cache passed)
-                created = self.create_subnet(
+                created = await self.create_subnet(
                     name=name,
                     cidr=cidr,
                     gateway=gateway,
@@ -430,5 +430,5 @@ class SubnetService:
             except (SubnetValidationError, SubnetConflictError) as e:
                 errors.append(f"Row {idx+1} ({cidr}): {str(e)}")
 
-        self._db.commit()
+        await self._db.commit()
         return {"imported": created_count, "errors": errors}

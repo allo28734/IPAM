@@ -20,7 +20,7 @@ router = APIRouter(
 
 
 @router.get("", response_model=AuditLogListResponse)
-def list_audit_logs(
+async def list_audit_logs(
     db: DbSession,
     entity_type: str | None = Query(None, max_length=50),
     action: str | None = Query(None, max_length=50),
@@ -43,11 +43,12 @@ def list_audit_logs(
 
     # Count total before pagination
     count_stmt = select(func.count()).select_from(stmt.subquery())
-    total = db.scalar(count_stmt) or 0
+    total = await db.scalar(count_stmt) or 0
 
     # Apply pagination and ordering (newest first)
     stmt = stmt.order_by(AuditLog.timestamp.desc()).offset(skip).limit(limit)
-    items = db.scalars(stmt).all()
+    result = await db.scalars(stmt)
+    items = result.all()
 
     return AuditLogListResponse(
         items=[AuditLogResponse.model_validate(log) for log in items],

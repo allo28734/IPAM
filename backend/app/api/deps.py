@@ -11,7 +11,8 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -21,7 +22,7 @@ from app.services.ip_address_service import IPAddressService
 from app.services.subnet_service import SubnetService
 
 # Type alias for a database session dependency
-DbSession = Annotated[Session, Depends(get_db)]
+DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 # OAuth2 scheme — points to the token endpoint for Swagger UI integration
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
@@ -43,7 +44,7 @@ def get_ip_service(db: DbSession) -> IPAddressService:
 # ── Auth dependencies ──────────────────────────────────────────
 
 
-def get_current_user(
+async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
     db: DbSession,
 ) -> User:
@@ -72,14 +73,14 @@ def get_current_user(
         raise credentials_exception
 
     repo = UserRepository(db)
-    user = repo.get_by_id(user_id)
+    user = await repo.get_by_id(user_id)
     if user is None or not user.is_active:
         raise credentials_exception
 
     return user
 
 
-def get_current_active_admin(
+async def get_current_active_admin(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:
     """
@@ -104,13 +105,19 @@ CurrentAdmin = Annotated[User, Depends(get_current_active_admin)]
 
 from app.models.system_settings import SystemSettings
 
-def get_system_settings(db: DbSession) -> SystemSettings:
-    settings = db.query(SystemSettings).filter(SystemSettings.id == 1).first()
+async def get_system_settings(db: DbSession) -> SystemSettings:
+    """
+    Dependency to fetch the single SystemSettings row from the database.
+    Creates the row if it does not already exist.
+    """
+    stmt = select(SystemSettings).where(SystemSettings.id == 1)
+    result = await db.scalars(stmt)
+    settings = result.first()
     if not settings:
         settings = SystemSettings(id=1)
         db.add(settings)
-        db.commit()
-        db.refresh(settings)
+        await db.commit()
+        await db.refresh(settings)
     return settings
 
 SystemSettingsDep = Annotated[SystemSettings, Depends(get_system_settings)]

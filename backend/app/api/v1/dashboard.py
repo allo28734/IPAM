@@ -17,16 +17,16 @@ router = APIRouter(
 
 
 @router.get("/stats", response_model=DashboardStats)
-def get_dashboard_stats(
+async def get_dashboard_stats(
     subnet_service: SubnetServiceDep,
     ip_service: IPServiceDep,
 ):
     """Return aggregate IPAM statistics for the dashboard."""
-    total_subnets = subnet_service.get_total_count()
-    total_ips = ip_service.get_total_count()
-    assigned = ip_service.get_total_count_by_status("assigned")
-    available = ip_service.get_total_count_by_status("available")
-    reserved = ip_service.get_total_count_by_status("reserved")
+    total_subnets = await subnet_service.get_total_count()
+    total_ips = await ip_service.get_total_count()
+    assigned = await ip_service.get_total_count_by_status("assigned")
+    available = await ip_service.get_total_count_by_status("available")
+    reserved = await ip_service.get_total_count_by_status("reserved")
 
     # Overall utilization: assigned / (assigned + available + reserved)
     if total_ips > 0:

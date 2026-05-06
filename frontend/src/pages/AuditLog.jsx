@@ -112,7 +112,7 @@ const AuditLog = () => {
                       </td>
                       <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)', maxWidth: '300px' }}>
                         <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>
-                          {JSON.stringify(log.changes)}
+                          {log.details}
                         </pre>
                       </td>
                     </tr>

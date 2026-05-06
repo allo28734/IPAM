@@ -6,7 +6,7 @@ All configuration is centralized here to keep the rest of the
 application decoupled from environment specifics.
 """
 
-from pydantic import field_validator
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     debug: bool = False
 
     # Database — PostgreSQL via Docker (see docker-compose.yml)
-    database_url: str = "postgresql://ipam_admin:ipam_internal_secure_db_pass@db:5432/ipam"
+    database_url: str = "postgresql+asyncpg://ipam_admin:ipam_internal_secure_db_pass@db:5432/ipam"
 
     # CORS — allow local development frontend
     cors_origins: list[str] = [

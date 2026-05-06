@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, Download, Upload, ChevronRight, ChevronDown, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import api from '../lib/axios';
 
 const buildSubnetTree = (subnets) => {
@@ -182,9 +183,9 @@ const Subnets = () => {
             </div>
           </td>
           <td>
-            <a href={`/subnets/${subnet.id}`} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
+            <Link to={`/subnets/${subnet.id}`} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
               Manage
-            </a>
+            </Link>
           </td>
         </tr>
         {isExpanded && hasChildren && subnet.children.map(child => renderSubnetRow(child, depth + 1))}

@@ -7,7 +7,16 @@ This directory contains the core API, database models, and background task worke
 - **ORM & Database**: SQLAlchemy with PostgreSQL
 - **Migrations**: Alembic
 - **Background Tasks**: Celery with Redis
-- **Security**: OAuth2 with JWT, Role-Based Access Control (RBAC)
+- **Security**: OAuth2 with JWT, Role-Based Access Control (RBAC), password hashing via `passlib[bcrypt]`
+
+## Environment Variables
+Key configuration options for `.env`:
+- `DATABASE_URL`: PostgreSQL connection string (asyncpg)
+- `REDIS_URL`: Redis connection string for Celery
+- `JWT_SECRET_KEY`: 64-char hex string for JWT signing
+- `ENCRYPTION_KEY`: Fernet key for symmetric encryption
+- `CORS_ORIGINS`: Comma-separated list of allowed origins
+- `DEBUG`: Set to `true` for local development only
 
 ## Local Development Setup
 
@@ -36,6 +45,13 @@ To run the backend locally without Docker:
    uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
    ```
    The API will be available at `http://localhost:8000`, and the interactive Swagger documentation will be at `http://localhost:8000/docs`.
+
+## Running Tests
+To run the automated test suite, use pytest:
+```bash
+pytest backend/tests -v
+```
+*Note: This will require a running PostgreSQL database configured for testing.*
 
 ## Database Migrations (Alembic)
 

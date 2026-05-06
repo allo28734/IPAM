@@ -2,6 +2,11 @@
 
 This directory contains the user interface for the IPAM application. It is built using **React** and **Vite** and uses vanilla CSS for styling.
 
+## Architecture & Design
+- **Components**: The application uses a nested component structure (`src/components/Layout/`) to maintain UI consistency.
+- **Design System**: Global vanilla CSS classes (`glass-card`, `btn-primary`, `form-input`) ensure a unified, modern, "glassmorphism" aesthetic.
+- **Feature Flags**: The frontend conditionally renders elements based on feature flags fetched from `/api/v1/system/features`.
+
 ## Prerequisites
 
 - Node.js (Version 22.x or later)

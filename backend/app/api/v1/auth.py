@@ -50,16 +50,16 @@ def _sso_is_configured(sys_settings) -> bool:
 
 
 @router.get("/setup-status")
-def get_setup_status(db: DbSession):
+async def get_setup_status(db: DbSession):
     """Check if the system requires first-run setup."""
-    return {"needs_setup": is_setup_required(db)}
+    return {"needs_setup": await is_setup_required(db)}
 
 
 # ── Login / Token ──────────────────────────────────────────────
 
 
 @router.post("/token", response_model=Token)
-def login_for_access_token(
+async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: DbSession = None,
 ):
@@ -68,7 +68,7 @@ def login_for_access_token(
 
     Uses OAuth2-compatible form encoding (application/x-www-form-urlencoded).
     """
-    user = authenticate_user(db, form_data.username, form_data.password)
+    user = await authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -96,7 +96,7 @@ def read_current_user(current_user: CurrentUser):
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def register_user(
+async def register_user(
     body: UserCreate,
     db: DbSession,
     token: str | None = Depends(optional_oauth2_scheme),
@@ -107,7 +107,7 @@ def register_user(
     Allows registration without an admin JWT ONLY IF the system requires setup.
     Otherwise, a valid admin JWT is required.
     """
-    if not is_setup_required(db):
+    if not await is_setup_required(db):
         if not token:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -115,8 +115,8 @@ def register_user(
             )
         from app.api.deps import get_current_user, get_current_active_admin
         try:
-            user = get_current_user(token, db)
-            get_current_active_admin(user)
+            user = await get_current_user(token, db)
+            await get_current_active_admin(user)
         except HTTPException:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -126,14 +126,14 @@ def register_user(
     repo = UserRepository(db)
 
     # Check for existing username
-    if repo.get_by_username(body.username):
+    if await repo.get_by_username(body.username):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Username '{body.username}' is already taken",
         )
 
     # Check for existing email
-    if repo.get_by_email(body.email):
+    if await repo.get_by_email(body.email):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Email '{body.email}' is already registered",
@@ -145,7 +145,7 @@ def register_user(
         hashed_password=hash_password(body.password),
         role=body.role,
     )
-    created = repo.create(user)
+    created = await repo.create(user)
     return UserResponse.model_validate(created)
 
 
@@ -243,7 +243,7 @@ async def sso_callback(request: Request, db: DbSession, sys_settings: SystemSett
         )
 
     # Delegate to service layer (business logic)
-    user = handle_sso_login(db, email, username, user_groups)
+    user = await handle_sso_login(db, email, username, user_groups, sys_settings)
 
     # Issue a local IPAM JWT — same as local login
     access_token = create_access_token(data={"sub": str(user.id)})
