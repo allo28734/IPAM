@@ -11,6 +11,8 @@ import AuditLog from './pages/AuditLog';
 import SetupWizard from './pages/SetupWizard';
 import SSOSuccess from './pages/SSOSuccess';
 import DiscoveryProfiles from './pages/DiscoveryProfiles';
+import Integrations from './pages/Integrations';
+import ApprovalQueue from './pages/ApprovalQueue';
 
 function SetupCheck({ children }) {
   const [checking, setChecking] = useState(true);
@@ -71,6 +73,8 @@ function App() {
               <Route path="/subnets/:id" element={<SubnetDetail />} />
               <Route path="/audit" element={<AuditLog />} />
               <Route path="/discovery-profiles" element={<DiscoveryProfiles />} />
+              <Route path="/integrations" element={<Integrations />} />
+              <Route path="/approval-queue" element={<ApprovalQueue />} />
             </Route>
           </Route>
         </Routes>

@@ -38,6 +38,11 @@ class IPAddress(Base):
     os_guess: Mapped[str | None] = mapped_column(String(255), nullable=True)
     device_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     tags: Mapped[dict | None] = mapped_column(JSON, default=dict, nullable=True)
+    source_integration_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("integration_providers.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+        comment="ID of the integration provider that last enriched this IP"
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

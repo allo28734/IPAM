@@ -27,6 +27,10 @@ celery_app.conf.update(
             "task": "app.worker.sweep_tasks.sweep_all_subnets",
             "schedule": crontab(minute=0),  # top of every hour
         },
+        "sync-all-integrations": {
+            "task": "app.worker.sync_tasks.sync_all_integrations",
+            "schedule": crontab(minute="*/30"),  # every 30 minutes
+        },
     },
 )
 

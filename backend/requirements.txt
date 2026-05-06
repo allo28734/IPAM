@@ -21,3 +21,5 @@ python-nmap>=0.7.1,<1.0.0
 mac-vendor-lookup>=0.1.12,<1.0.0
 pysnmp-lextudio>=6.0.0,<7.0.0
 cryptography>=41.0.0,<44.0.0
+meraki>=1.45,<2.0.0
+pycentral>=2.0,<3.0.0

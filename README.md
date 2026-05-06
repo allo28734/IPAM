@@ -2,20 +2,50 @@
 
 IPAM is a modern, responsive, and automated IP Address Management system designed to be "zero-touch" out of the box while providing the flexibility required for enterprise environments.
 
-## Features
-- **Zero-Touch Setup**: An embedded Setup Wizard handles database migrations, initial admin creation, and configuration via the UI.
-- **Automated Discovery**: Optional background workers (Celery) can automatically scan your subnets using ICMP/SNMP to find active hosts and flag conflicts.
-- **Role-Based Access Control**: Strict separation between `admin` and `readonly` users, with full OIDC Single Sign-On (SSO) support.
-- **IPv6 Ready**: Full support for IPv4 and IPv6 address management with protocol-agnostic networking logic.
+---
+
+## ✨ Features
+
+- **Zero-Touch Setup** — An embedded Setup Wizard handles database migrations, initial admin creation, and configuration via the UI.
+- **Automated Discovery** — Optional background workers (Celery) scan subnets using ICMP/SNMPv3 to find active hosts and flag conflicts.
+- **Multi-Vendor Integrations** — Pull live network data directly from your infrastructure platforms (see below).
+- **Role-Based Access Control** — Strict separation between `admin` and `readonly` users, with full OIDC Single Sign-On (SSO) support.
+- **IPv6 Ready** — Full support for IPv4 and IPv6 address management with protocol-agnostic networking logic.
+- **Approval Queue** — Subnets discovered by integrations can be reviewed and approved by admins before creation.
+- **CSV Import/Export** — Bulk import and export subnet data via CSV files.
+
+---
+
+## 🔌 Supported Integrations
+
+IPAM includes a pluggable multi-vendor integration framework that connects directly to your network infrastructure to automatically discover subnets, enrich IP address records, and inventory managed devices.
+
+| Vendor | Adapter | Auth Methods | Data Collected |
+|--------|---------|-------------|----------------|
+| 🌐 **Cisco Meraki** | Official `meraki` SDK | API Key | VLANs, clients, device inventory |
+| 🛡️ **Fortinet FortiGate** | FortiOS REST API | API Token **or** Username/Password | Interfaces, DHCP leases, ARP table |
+| 📡 **HPE Aruba Central** | `pycentral` SDK | Client ID + Secret | Groups/VLANs, wireless + wired clients, APs, switches, gateways |
+| 🔥 **Palo Alto Networks** | PAN-OS XML API | API Key **or** Username/Password | Interfaces, ARP table, DHCP leases, system info |
+
+### How It Works
+
+1. **Configure** — Add your vendor credentials through the Integrations UI. All API keys and passwords are encrypted at rest using Fernet symmetric encryption.
+2. **Sync** — Trigger a manual sync or let the background scheduler (every 30 minutes) pull data automatically.
+3. **Enrich** — Vendor data fills in missing fields (MAC, hostname, OS, device type) on your existing IP records without overwriting human-entered data.
+4. **Discover** — New subnets found by vendors are either auto-created or routed to the **Approval Queue** for admin review, based on a per-provider toggle.
 
 ---
 
 ## Architecture
+
 IPAM is built with a strict Separation of Concerns (SoC) architecture:
 - **API Routers**: Handle HTTP request/response formatting (`app/api/v1/`).
 - **Service Layer**: Contains all core business logic and validation (`app/services/`).
-- **Repository Layer**: Manages all database queries and transactions (`app/repositories/`).
+- **Adapter Layer**: Pluggable vendor integrations via abstract base class (`app/integrations/`).
 - **Data Models**: Defines SQLAlchemy ORM models (`app/models/`).
+- **Background Workers**: Celery tasks for network sweeps and vendor sync (`app/worker/`).
+
+---
 
 ## Quick Start (Docker)
 
@@ -118,6 +148,8 @@ python -c "import secrets; print(secrets.token_hex(32))"
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
+---
+
 ## Troubleshooting
 
 - **First boot secrets**: The Docker entrypoint will automatically generate `JWT_SECRET_KEY` and `ENCRYPTION_KEY` on first boot and save them to `backend_data/app_secrets.env`.
@@ -133,3 +165,24 @@ If you wish to contribute or modify the code locally without Docker, please see 
 - **[Frontend Setup & UI](frontend/README.md)**
 
 Alternatively, you can run the provided helper scripts (`start.bat` on Windows or `start.ps1` for PowerShell) to quickly spin up the local development servers.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Frontend** | React 18 + Vite, Tailwind CSS v4 |
+| **Backend** | FastAPI, SQLAlchemy 2.0 (async), Pydantic v2 |
+| **Database** | PostgreSQL (asyncpg) |
+| **Background** | Celery + Redis |
+| **Auth** | JWT (OAuth2), OIDC SSO, RBAC |
+| **Encryption** | Fernet (cryptography) |
+| **Discovery** | ICMP, SNMPv3, Nmap |
+| **Integrations** | Meraki SDK, pycentral, httpx, PAN-OS XML |
+
+---
+
+## License
+
+This project is open source. See the [LICENSE](LICENSE) file for details.

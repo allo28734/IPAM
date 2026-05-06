@@ -1,15 +1,19 @@
 import { useState, useEffect } from 'react';
-import { Network, LayoutDashboard, History, Scan } from 'lucide-react';
+import { Network, LayoutDashboard, History, Scan, Plug, ClipboardCheck } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import api from '../../lib/axios';
 
 const Layout = ({ children }) => {
   const [features, setFeatures] = useState({ enable_network_discovery: true });
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     api.get('/system/features')
       .then(res => setFeatures(res.data))
       .catch(err => console.error("Failed to fetch features", err));
+    api.get('/pending-subnets/count')
+      .then(res => setPendingCount(res.data.count || 0))
+      .catch(() => {});  // Silently fail if user is readonly
   }, []);
   return (
     <div className="flex min-h-screen">
@@ -73,6 +77,35 @@ const Layout = ({ children }) => {
               )}
             </NavLink>
           )}
+
+          <NavLink 
+            to="/integrations" 
+            className={({ isActive }) => `flex items-center gap-3 px-4 py-3 rounded-md font-medium transition-all duration-200 cursor-pointer ${isActive ? 'bg-indigo-500/10 text-accent-primary border-l-3 border-accent-primary' : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'}`}
+          >
+            {({ isActive }) => (
+              <>
+                <Plug size={20} className={`transition-all duration-200 ${isActive ? 'drop-shadow-[0_0_4px_var(--color-accent-glow)]' : ''}`} />
+                <span>Integrations</span>
+              </>
+            )}
+          </NavLink>
+
+          <NavLink 
+            to="/approval-queue" 
+            className={({ isActive }) => `flex items-center gap-3 px-4 py-3 rounded-md font-medium transition-all duration-200 cursor-pointer ${isActive ? 'bg-indigo-500/10 text-accent-primary border-l-3 border-accent-primary' : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'}`}
+          >
+            {({ isActive }) => (
+              <>
+                <ClipboardCheck size={20} className={`transition-all duration-200 ${isActive ? 'drop-shadow-[0_0_4px_var(--color-accent-glow)]' : ''}`} />
+                <span>Approval Queue</span>
+                {pendingCount > 0 && (
+                  <span className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold bg-warning text-black animate-pulse">
+                    {pendingCount}
+                  </span>
+                )}
+              </>
+            )}
+          </NavLink>
         </nav>
       </aside>
 
