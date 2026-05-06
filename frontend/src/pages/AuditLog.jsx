@@ -28,21 +28,35 @@ const AuditLog = () => {
     fetchLogs();
   }, [filterType, filterAction]);
 
+  // Shared classes
+  const glassCardClass = "bg-bg-card backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-md transition-all hover:shadow-lg hover:border-white/20";
+  const formInputClass = "w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-text-primary text-sm transition-all focus:outline-none focus:border-accent-primary focus:ring-3 focus:ring-indigo-500/20";
+  const tableContainerClass = "w-full overflow-x-auto rounded-xl border border-white/10 bg-bg-secondary";
+  const tableClass = "w-full border-collapse text-left";
+  const thClass = "p-4 text-xs font-semibold uppercase text-text-secondary border-b border-white/10 bg-black/20 tracking-wider";
+  const tdClass = "p-4 text-sm border-b border-white/5 align-middle group-last:border-none";
+  const trClass = "transition-all hover:bg-white/5 group";
+  
+  const badgeClass = "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border";
+  const badgeInfoClass = `${badgeClass} bg-info-bg text-info border-info/20`;
+  const badgeWarningClass = `${badgeClass} bg-warning-bg text-warning border-warning/20`;
+  const badgeSuccessClass = `${badgeClass} bg-success-bg text-success border-success/20`;
+  const badgeDangerClass = `${badgeClass} bg-danger-bg text-danger border-danger/20`;
+
   return (
-    <div className="content-area">
-      <header className="header" style={{ margin: '-32px -32px 32px -32px' }}>
-        <h1 className="page-title">Audit Log</h1>
+    <div className="flex-1 p-8">
+      <header className="h-[var(--spacing-header)] bg-[#0f1115]/80 backdrop-blur-xl border-b border-white/10 flex items-center justify-between px-8 sticky top-0 z-30 -mt-8 -mx-8 mb-8">
+        <h1 className="text-xl font-semibold">Audit Log</h1>
       </header>
 
-      <div className="glass-card" style={{ marginBottom: '24px', padding: '16px 24px', display: 'flex', gap: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Filter size={16} color="var(--text-muted)" />
-          <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 500 }}>Filters:</span>
+      <div className={`${glassCardClass} mb-6 flex gap-4 p-4`}>
+        <div className="flex items-center gap-2">
+          <Filter size={16} className="text-text-muted" />
+          <span className="text-text-secondary text-sm font-medium">Filters:</span>
         </div>
         
         <select 
-          className="form-input" 
-          style={{ width: '200px', padding: '8px 12px' }}
+          className={`${formInputClass} !w-[200px] !py-2 !px-3`}
           value={filterType}
           onChange={(e) => setFilterType(e.target.value)}
         >
@@ -52,8 +66,7 @@ const AuditLog = () => {
         </select>
 
         <select 
-          className="form-input" 
-          style={{ width: '200px', padding: '8px 12px' }}
+          className={`${formInputClass} !w-[200px] !py-2 !px-3`}
           value={filterAction}
           onChange={(e) => setFilterAction(e.target.value)}
         >
@@ -66,52 +79,52 @@ const AuditLog = () => {
         </select>
       </div>
 
-      <div className="glass-card">
+      <div className={glassCardClass}>
         {loading ? (
-          <div style={{ padding: '64px', textAlign: 'center' }}>
-            <div className="loader" style={{ margin: '0 auto' }}></div>
+          <div className="p-16 text-center">
+            <div className="loader w-6 h-6 mx-auto"></div>
           </div>
         ) : (
-          <div className="table-container">
-            <table className="table">
+          <div className={tableContainerClass}>
+            <table className={tableClass}>
               <thead>
                 <tr>
-                  <th>Timestamp</th>
-                  <th>Entity Type</th>
-                  <th>Entity ID</th>
-                  <th>Action</th>
-                  <th>Details</th>
+                  <th className={thClass}>Timestamp</th>
+                  <th className={thClass}>Entity Type</th>
+                  <th className={thClass}>Entity ID</th>
+                  <th className={thClass}>Action</th>
+                  <th className={thClass}>Details</th>
                 </tr>
               </thead>
               <tbody>
                 {logs.length === 0 ? (
                   <tr>
-                    <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
+                    <td colSpan="5" className="text-center p-8 text-text-muted">
                       No audit logs found.
                     </td>
                   </tr>
                 ) : (
                   logs.map((log) => (
-                    <tr key={log.id}>
-                      <td style={{ color: 'var(--text-secondary)' }}>
+                    <tr key={log.id} className={trClass}>
+                      <td className={`${tdClass} text-text-secondary`}>
                         {new Date(log.timestamp).toLocaleString()}
                       </td>
-                      <td>
-                        <span className={`badge ${log.entity_type === 'subnet' ? 'badge-info' : 'badge-warning'}`}>
+                      <td className={tdClass}>
+                        <span className={log.entity_type === 'subnet' ? badgeInfoClass : badgeWarningClass}>
                           {log.entity_type}
                         </span>
                       </td>
-                      <td style={{ fontFamily: 'monospace' }}>{log.entity_id}</td>
-                      <td>
-                        <span className={`badge ${
-                          ['created', 'assigned'].includes(log.action) ? 'badge-success' :
-                          ['deleted', 'released'].includes(log.action) ? 'badge-danger' : 'badge-warning'
-                        }`}>
+                      <td className={`${tdClass} font-mono`}>{log.entity_id}</td>
+                      <td className={tdClass}>
+                        <span className={
+                          ['created', 'assigned'].includes(log.action) ? badgeSuccessClass :
+                          ['deleted', 'released'].includes(log.action) ? badgeDangerClass : badgeWarningClass
+                        }>
                           {log.action}
                         </span>
                       </td>
-                      <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)', maxWidth: '300px' }}>
-                        <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>
+                      <td className={`${tdClass} text-xs text-text-muted max-w-[300px]`}>
+                        <pre className="m-0 whitespace-pre-wrap font-inherit">
                           {log.details}
                         </pre>
                       </td>

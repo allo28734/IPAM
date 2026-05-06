@@ -147,43 +147,68 @@ const Subnets = () => {
     }
   };
 
+  // Shared classes
+  const glassCardClass = "bg-bg-card backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-md transition-all hover:shadow-lg hover:border-white/20";
+  const btnPrimaryClass = "inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm cursor-pointer transition-all border-none outline-none bg-accent-primary text-white shadow-[0_4px_12px_var(--color-accent-glow)] hover:bg-accent-hover hover:-translate-y-0.5 hover:shadow-[0_6px_16px_var(--color-accent-glow)]";
+  const btnSecondaryClass = "inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm cursor-pointer transition-all border border-white/10 outline-none bg-bg-tertiary text-text-primary hover:bg-white/10 hover:border-white/20";
+  const formInputClass = "w-full px-4 py-3 bg-black/20 border border-white/10 rounded-xl text-text-primary text-sm transition-all focus:outline-none focus:border-accent-primary focus:ring-3 focus:ring-indigo-500/20";
+  const formLabelClass = "block mb-2 text-sm font-medium text-text-secondary";
+  const formGroupClass = "mb-5";
+  const modalOverlayClass = "fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] animate-[fadeIn_0.2s_forwards]";
+  const modalContentClass = "bg-bg-secondary border border-white/10 rounded-2xl w-full max-w-[500px] shadow-2xl transform scale-95 animate-[scaleIn_0.2s_0.05s_forwards]";
+  const modalHeaderClass = "p-5 px-6 border-b border-white/10 flex justify-between items-center";
+  const modalTitleClass = "text-lg font-semibold";
+  const modalCloseClass = "bg-transparent border-none text-text-secondary cursor-pointer transition-all hover:text-text-primary flex items-center";
+  const modalBodyClass = "p-6";
+  const modalFooterClass = "px-6 py-4 border-t border-white/10 flex justify-end gap-3 bg-black/20 rounded-b-2xl";
+  const tableContainerClass = "w-full overflow-x-auto rounded-xl border border-white/10 bg-bg-secondary";
+  const tableClass = "w-full border-collapse text-left";
+  const thClass = "p-4 text-xs font-semibold uppercase text-text-secondary border-b border-white/10 bg-black/20 tracking-wider";
+  const tdClass = "p-4 text-sm border-b border-white/5 align-middle group-last:border-none";
+  const trClass = "transition-all hover:bg-white/5 group";
+  const badgeInfoClass = "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-info-bg text-info border border-info/20";
+  const badgeDangerClass = "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-danger-bg text-danger border border-danger/20";
+  const tagChipClass = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-500/15 text-text-primary border border-indigo-500/30 backdrop-blur-sm m-0.5";
+  const tagKeyClass = "text-text-secondary font-semibold";
+  const tagRemoveClass = "cursor-pointer text-text-muted transition-all hover:text-danger flex items-center";
+
   const renderSubnetRow = (subnet, depth = 0) => {
     const hasChildren = subnet.children && subnet.children.length > 0;
     const isExpanded = expandedIds.has(subnet.id);
     
     return (
       <React.Fragment key={subnet.id}>
-        <tr>
-          <td style={{ paddingLeft: `${16 + depth * 24}px`, fontWeight: 500 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <tr className={trClass}>
+          <td className={tdClass} style={{ paddingLeft: `${16 + depth * 24}px`, fontWeight: 500 }}>
+            <div className="flex items-center gap-2">
               {hasChildren ? (
                 <button 
                   onClick={() => toggleExpand(subnet.id)}
-                  style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  className="bg-transparent border-none text-text-secondary cursor-pointer flex items-center"
                 >
                   {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                 </button>
-              ) : <span style={{ width: 16 }}></span>}
+              ) : <span className="w-4"></span>}
               {subnet.name}
             </div>
           </td>
-          <td>
-            <span className="badge badge-info" style={{ marginRight: '8px' }}>IPv{subnet.ip_version}</span>
-            <span className="badge badge-info">{subnet.cidr}</span>
+          <td className={tdClass}>
+            <span className={`${badgeInfoClass} mr-2`}>IPv{subnet.ip_version}</span>
+            <span className={badgeInfoClass}>{subnet.cidr}</span>
           </td>
-          <td>{subnet.gateway || '-'}</td>
-          <td>{subnet.vlan_id || '-'}</td>
-          <td>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+          <td className={tdClass}>{subnet.gateway || '-'}</td>
+          <td className={tdClass}>{subnet.vlan_id || '-'}</td>
+          <td className={tdClass}>
+            <div className="flex flex-wrap gap-1">
               {subnet.tags && Object.entries(subnet.tags).map(([k, v]) => (
-                <span key={k} className="tag-chip">
-                  <span className="tag-key">{k}:</span> {v}
+                <span key={k} className={tagChipClass}>
+                  <span className={tagKeyClass}>{k}:</span> {v}
                 </span>
               ))}
             </div>
           </td>
-          <td>
-            <Link to={`/subnets/${subnet.id}`} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
+          <td className={tdClass}>
+            <Link to={`/subnets/${subnet.id}`} className={`${btnSecondaryClass} !px-3 !py-1.5 !text-xs`}>
               Manage
             </Link>
           </td>
@@ -196,63 +221,62 @@ const Subnets = () => {
   const tree = buildSubnetTree(subnets);
 
   return (
-    <div className="content-area">
-      <header className="header" style={{ margin: '-32px -32px 32px -32px' }}>
-        <h1 className="page-title">Manage Subnets</h1>
-        <div className="header-actions">
-          <button className="btn btn-secondary" onClick={handleExport}>
+    <div className="flex-1 p-8">
+      <header className="h-[var(--spacing-header)] bg-[#0f1115]/80 backdrop-blur-xl border-b border-white/10 flex items-center justify-between px-8 sticky top-0 z-30 -mt-8 -mx-8 mb-8">
+        <h1 className="text-xl font-semibold">Manage Subnets</h1>
+        <div className="flex items-center gap-4">
+          <button className={btnSecondaryClass} onClick={handleExport}>
             <Download size={16} /> Export CSV
           </button>
-          <button className="btn btn-secondary" onClick={() => { setIsImportModalOpen(true); setImportResult(null); }}>
+          <button className={btnSecondaryClass} onClick={() => { setIsImportModalOpen(true); setImportResult(null); }}>
             <Upload size={16} /> Import CSV
           </button>
-          <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
+          <button className={btnPrimaryClass} onClick={() => setIsModalOpen(true)}>
             <Plus size={16} /> New Subnet
           </button>
         </div>
       </header>
 
       {error && !isModalOpen && (
-        <div className="glass-card badge-danger" style={{ marginBottom: '24px', padding: '16px' }}>
+        <div className={`${glassCardClass} ${badgeDangerClass} !block mb-6`}>
           {error}
         </div>
       )}
 
-      <div className="glass-card" style={{ marginBottom: '24px', padding: '16px 24px' }}>
-        <div style={{ position: 'relative', width: '300px' }}>
-          <Search size={18} style={{ position: 'absolute', left: '12px', top: '14px', color: 'var(--text-muted)' }} />
+      <div className={`${glassCardClass} mb-6`}>
+        <div className="relative w-[300px]">
+          <Search size={18} className="absolute left-3 top-3.5 text-text-muted" />
           <input
             type="text"
-            className="form-input"
+            className={`${formInputClass} !pl-10`}
             placeholder="Search subnets..."
-            style={{ paddingLeft: '40px' }}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
       </div>
 
-      <div className="table-container">
+      <div className={tableContainerClass}>
         {loading ? (
-          <div style={{ padding: '32px', textAlign: 'center' }}>
-            <div className="loader" style={{ margin: '0 auto' }}></div>
+          <div className="p-8 text-center">
+            <div className="loader w-6 h-6 mx-auto"></div>
           </div>
         ) : (
-          <table className="table">
+          <table className={tableClass}>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Network (CIDR)</th>
-                <th>Gateway</th>
-                <th>VLAN</th>
-                <th>Tags</th>
-                <th>Actions</th>
+                <th className={thClass}>Name</th>
+                <th className={thClass}>Network (CIDR)</th>
+                <th className={thClass}>Gateway</th>
+                <th className={thClass}>VLAN</th>
+                <th className={thClass}>Tags</th>
+                <th className={thClass}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {tree.length === 0 ? (
                 <tr>
-                  <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
+                  <td colSpan="6" className="text-center p-8 text-text-muted">
                     No subnets found.
                   </td>
                 </tr>
@@ -265,26 +289,26 @@ const Subnets = () => {
       </div>
 
       {isModalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h2 className="modal-title">Create Subnet</h2>
-              <button className="modal-close" onClick={() => setIsModalOpen(false)}>
+        <div className={modalOverlayClass}>
+          <div className={modalContentClass}>
+            <div className={modalHeaderClass}>
+              <h2 className={modalTitleClass}>Create Subnet</h2>
+              <button className={modalCloseClass} onClick={() => setIsModalOpen(false)}>
                 <X size={20} />
               </button>
             </div>
             <form onSubmit={handleCreate}>
-              <div className="modal-body">
+              <div className={modalBodyClass}>
                 {error && (
-                  <div className="badge badge-danger" style={{ display: 'block', marginBottom: '16px', padding: '8px' }}>
+                  <div className={`${badgeDangerClass} !block mb-4`}>
                     {error}
                   </div>
                 )}
                 
-                <div className="form-group">
-                  <label className="form-label">Parent Subnet (Optional)</label>
+                <div className={formGroupClass}>
+                  <label className={formLabelClass}>Parent Subnet (Optional)</label>
                   <select 
-                    className="form-input"
+                    className={formInputClass}
                     value={formData.parent_id}
                     onChange={(e) => setFormData({ ...formData, parent_id: e.target.value })}
                   >
@@ -295,10 +319,10 @@ const Subnets = () => {
                   </select>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">Discovery Profile (Optional)</label>
+                <div className={formGroupClass}>
+                  <label className={formLabelClass}>Discovery Profile (Optional)</label>
                   <select 
-                    className="form-input"
+                    className={formInputClass}
                     value={formData.discovery_profile_id}
                     onChange={(e) => setFormData({ ...formData, discovery_profile_id: e.target.value })}
                   >
@@ -309,44 +333,44 @@ const Subnets = () => {
                   </select>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">Name *</label>
+                <div className={formGroupClass}>
+                  <label className={formLabelClass}>Name *</label>
                   <input
                     required
                     type="text"
-                    className="form-input"
+                    className={formInputClass}
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder="e.g. Office LAN"
                   />
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Network CIDR *</label>
+                <div className={formGroupClass}>
+                  <label className={formLabelClass}>Network CIDR *</label>
                   <input
                     required
                     type="text"
-                    className="form-input"
+                    className={formInputClass}
                     value={formData.cidr}
                     onChange={(e) => setFormData({ ...formData, cidr: e.target.value })}
                     placeholder="e.g. 10.0.1.0/24"
                   />
                 </div>
-                <div style={{ display: 'flex', gap: '16px' }}>
-                  <div className="form-group" style={{ flex: 1 }}>
-                    <label className="form-label">Gateway IP (Optional)</label>
+                <div className="flex gap-4">
+                  <div className={`${formGroupClass} flex-1`}>
+                    <label className={formLabelClass}>Gateway IP (Optional)</label>
                     <input
                       type="text"
-                      className="form-input"
+                      className={formInputClass}
                       value={formData.gateway}
                       onChange={(e) => setFormData({ ...formData, gateway: e.target.value })}
                       placeholder="e.g. 10.0.1.1"
                     />
                   </div>
-                  <div className="form-group" style={{ flex: 1 }}>
-                    <label className="form-label">VLAN ID (Optional)</label>
+                  <div className={`${formGroupClass} flex-1`}>
+                    <label className={formLabelClass}>VLAN ID (Optional)</label>
                     <input
                       type="number"
-                      className="form-input"
+                      className={formInputClass}
                       value={formData.vlan_id}
                       onChange={(e) => setFormData({ ...formData, vlan_id: e.target.value })}
                       placeholder="1-4095"
@@ -354,33 +378,33 @@ const Subnets = () => {
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">Custom Tags</label>
-                  <div className="tag-builder-inputs">
+                <div className={formGroupClass}>
+                  <label className={formLabelClass}>Custom Tags</label>
+                  <div className="flex gap-2 mb-3">
                     <input
                       type="text"
-                      className="form-input"
+                      className={formInputClass}
                       placeholder="Key (e.g. env)"
                       value={tagKey}
                       onChange={(e) => setTagKey(e.target.value)}
                     />
                     <input
                       type="text"
-                      className="form-input"
+                      className={formInputClass}
                       placeholder="Value (e.g. prod)"
                       value={tagValue}
                       onChange={(e) => setTagValue(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
                     />
-                    <button type="button" className="btn btn-secondary" onClick={addTag}>Add</button>
+                    <button type="button" className={btnSecondaryClass} onClick={addTag}>Add</button>
                   </div>
                   
                   {Object.keys(formData.tags).length > 0 && (
-                    <div className="tag-list">
+                    <div className="flex flex-wrap gap-1.5 mt-2 p-2 bg-black/20 rounded-xl min-h-[44px]">
                       {Object.entries(formData.tags).map(([k, v]) => (
-                        <span key={k} className="tag-chip">
-                          <span className="tag-key">{k}:</span> {v}
-                          <button type="button" className="tag-remove" onClick={() => removeTag(k)}>
+                        <span key={k} className={tagChipClass}>
+                          <span className={tagKeyClass}>{k}:</span> {v}
+                          <button type="button" className={tagRemoveClass} onClick={() => removeTag(k)}>
                             <X size={12} />
                           </button>
                         </span>
@@ -390,11 +414,11 @@ const Subnets = () => {
                 </div>
 
               </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>
+              <div className={modalFooterClass}>
+                <button type="button" className={btnSecondaryClass} onClick={() => setIsModalOpen(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <button type="submit" className={btnPrimaryClass}>
                   Create Subnet
                 </button>
               </div>
@@ -404,53 +428,52 @@ const Subnets = () => {
       )}
 
       {isImportModalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h2 className="modal-title">Bulk Import Subnets</h2>
-              <button className="modal-close" onClick={() => setIsImportModalOpen(false)}><X size={20} /></button>
+        <div className={modalOverlayClass}>
+          <div className={modalContentClass}>
+            <div className={modalHeaderClass}>
+              <h2 className={modalTitleClass}>Bulk Import Subnets</h2>
+              <button className={modalCloseClass} onClick={() => setIsImportModalOpen(false)}><X size={20} /></button>
             </div>
             <form onSubmit={handleImport}>
-              <div className="modal-body">
+              <div className={modalBodyClass}>
                 {importResult?.error && (
-                  <div className="badge badge-danger" style={{ display: 'block', marginBottom: '16px', padding: '8px' }}>
+                  <div className={`${badgeDangerClass} !block mb-4`}>
                     {importResult.error}
                   </div>
                 )}
                 {importResult && !importResult.error && (
-                  <div className="glass-card" style={{ marginBottom: '16px', padding: '16px', backgroundColor: 'var(--bg-glass-card)' }}>
-                    <h3 style={{ color: 'var(--success)', marginBottom: '8px' }}>Import Complete</h3>
+                  <div className={`${glassCardClass} mb-4`}>
+                    <h3 className="text-success mb-2 font-semibold">Import Complete</h3>
                     <p>Successfully imported: {importResult.imported} subnets</p>
                     {importResult.errors?.length > 0 && (
-                      <div style={{ marginTop: '12px' }}>
-                        <p style={{ color: 'var(--danger)', fontWeight: 600 }}>Errors ({importResult.errors.length}):</p>
-                        <ul style={{ marginTop: '4px', paddingLeft: '20px', fontSize: '0.9rem', color: 'var(--text-muted)', maxHeight: '150px', overflowY: 'auto' }}>
+                      <div className="mt-3">
+                        <p className="text-danger font-semibold">Errors ({importResult.errors.length}):</p>
+                        <ul className="mt-1 pl-5 text-sm text-text-muted max-h-[150px] overflow-y-auto list-disc">
                           {importResult.errors.map((err, i) => <li key={i}>{err}</li>)}
                         </ul>
                       </div>
                     )}
                   </div>
                 )}
-                <div className="form-group">
-                  <label className="form-label">CSV File</label>
+                <div className={formGroupClass}>
+                  <label className={formLabelClass}>CSV File</label>
                   <input
                     type="file"
                     accept=".csv"
-                    className="form-input"
-                    style={{ padding: '8px' }}
+                    className={`${formInputClass} !p-2`}
                     onChange={(e) => setImportFile(e.target.files[0])}
                     required
                   />
-                  <small style={{ color: 'var(--text-muted)', display: 'block', marginTop: '8px' }}>
+                  <small className="text-text-muted block mt-2 text-xs">
                     CSV must include 'name' and 'cidr' columns. Optional: 'gateway', 'vlan_id', 'description', 'parent_id', 'tags' (as JSON).
                   </small>
                 </div>
               </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setIsImportModalOpen(false)}>
+              <div className={modalFooterClass}>
+                <button type="button" className={btnSecondaryClass} onClick={() => setIsImportModalOpen(false)}>
                   Close
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={importing || !importFile}>
+                <button type="submit" className={btnPrimaryClass} disabled={importing || !importFile}>
                   {importing ? 'Importing...' : 'Upload & Import'}
                 </button>
               </div>
