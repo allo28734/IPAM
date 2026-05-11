@@ -53,15 +53,20 @@ The fastest way to run IPAM is using Docker Compose. This starts the core applic
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/ipam-project/IPAM.git
-   cd IPAM
+   git clone https://github.com/allo28734/ipam.git
+   cd ipam
    ```
 
-2. **Configure Environment Variables**:
-   Copy the example environment file and update the `CHANGE_ME` values with secure passwords/keys.
+2. **Initialize Environment** (one-time):
+   Run the bootstrap script to generate a `.env` file with secure random passwords and encryption keys:
    ```bash
-   cp .env.example .env
+   # Linux / macOS
+   chmod +x init.sh && ./init.sh
+
+   # Windows (PowerShell)
+   .\init.ps1
    ```
+   > **Note:** The script is safe to re-run — it will not overwrite an existing `.env` file. Generated credentials are printed once to the console; save them if needed for external database access.
 
 3. **Start the Application**:
    ```bash
@@ -87,23 +92,89 @@ docker compose --profile discovery up -d
 ## Production Deployment
 
 ### 1. Reverse Proxy & HTTPS
-**IMPORTANT**: The built-in Nginx container serves the frontend over **Plain HTTP on port 80**. 
+**IMPORTANT**: The built-in Nginx container serves the frontend over **Plain HTTP on port 80**.
 For production use, you **MUST** place IPAM behind a reverse proxy to handle SSL/TLS termination.
 
-The easiest option is [Caddy](https://caddyserver.com/), which provisions and renews HTTPS certificates automatically via Let's Encrypt. Create a `Caddyfile` in your project root:
+This requires two things:
+- **A TLS certificate** — Obtained from your organization's Certificate Authority (e.g., DigiCert, GoDaddy, an internal CA).
+- **A reverse proxy** — A web server on the host that terminates TLS and forwards traffic to the Docker container.
 
-```caddyfile
-# Caddyfile — Replace ipam.example.com with your actual domain.
-# Caddy automatically provisions HTTPS certificates from Let's Encrypt.
+#### Option A: Nginx (Recommended for Enterprise)
 
-ipam.example.com {
-    reverse_proxy ipam_frontend:80
-}
-```
+Use this option when your institution provides TLS certificates through a CA like DigiCert, GoDaddy, Sectigo, or an internal PKI.
 
-**Steps to run:**
+1. **Obtain a TLS certificate** from your institution's certificate provider. You will receive a certificate file (`.crt` or `.pem`) and a private key file (`.key`).
 
-1. Add Caddy as a service to your `docker-compose.yml` (or run it standalone):
+2. **Install Nginx** on the host (Ubuntu/Debian):
+   ```bash
+   sudo apt update && sudo apt install nginx -y
+   ```
+
+3. **Copy your certificate files** to the server:
+   ```bash
+   sudo cp ipam.crt /etc/ssl/certs/ipam.crt
+   sudo cp ipam.key /etc/ssl/private/ipam.key
+   sudo chmod 600 /etc/ssl/private/ipam.key
+   ```
+
+4. **Create the Nginx site configuration** at `/etc/nginx/sites-available/ipam`:
+   ```nginx
+   # Redirect HTTP to HTTPS
+   server {
+       listen 80;
+       server_name ipam.example.com;
+       return 301 https://$host$request_uri;
+   }
+
+   # HTTPS reverse proxy
+   server {
+       listen 443 ssl;
+       server_name ipam.example.com;
+
+       ssl_certificate     /etc/ssl/certs/ipam.crt;
+       ssl_certificate_key /etc/ssl/private/ipam.key;
+
+       # Modern TLS settings
+       ssl_protocols TLSv1.2 TLSv1.3;
+       ssl_prefer_server_ciphers on;
+
+       location / {
+           proxy_pass http://127.0.0.1:80;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+   }
+   ```
+   > **Note:** Replace `ipam.example.com` with your actual FQDN.
+
+5. **Enable the site and restart Nginx**:
+   ```bash
+   sudo ln -s /etc/nginx/sites-available/ipam /etc/nginx/sites-enabled/
+   sudo nginx -t          # Verify configuration
+   sudo systemctl restart nginx
+   ```
+
+6. **Update the frontend port binding** in `docker-compose.yml` to bind only to localhost, preventing direct access that bypasses TLS:
+   ```yaml
+   ports:
+     - "127.0.0.1:80:80"    # Only accessible via the host reverse proxy
+   ```
+
+#### Option B: Caddy (Automatic Let's Encrypt)
+
+If your environment allows outbound ACME challenges, [Caddy](https://caddyserver.com/) is the simplest option — it provisions and renews HTTPS certificates automatically via Let's Encrypt with zero configuration.
+
+1. Create a `Caddyfile` in your project root:
+   ```caddyfile
+   # Replace ipam.example.com with your actual domain.
+   ipam.example.com {
+       reverse_proxy ipam_frontend:80
+   }
+   ```
+
+2. Add Caddy as a service to your `docker-compose.yml` (or run it standalone):
    ```yaml
    caddy:
      image: caddy:alpine
@@ -125,7 +196,7 @@ ipam.example.com {
    ```
    > **Note:** If you add Caddy to the compose stack, remove `ports: - "80:80"` from the `frontend` service to avoid a port conflict.
 
-2. Add `caddy_data` to the `volumes:` section at the bottom of your `docker-compose.yml`, then bring everything up:
+3. Add `caddy_data` to the `volumes:` section at the bottom of your `docker-compose.yml`, then bring everything up:
    ```bash
    docker compose up -d
    ```
@@ -139,7 +210,9 @@ By default, the `docker-compose.yml` spins up embedded PostgreSQL and Redis cont
 4. Run `docker compose up -d`.
 
 ### 3. Application Secrets
-Before deploying to production, ensure you generate cryptographically strong values for your `.env` file:
+If you used the `init.sh` / `init.ps1` bootstrap scripts, all secrets (`DB_PASSWORD`, `REDIS_PASSWORD`, `JWT_SECRET_KEY`, `ENCRYPTION_KEY`) were generated automatically. No manual action is needed.
+
+If you created `.env` manually, ensure you generate cryptographically strong values:
 ```bash
 # Generate a JWT Secret Key
 python -c "import secrets; print(secrets.token_hex(32))"
@@ -154,7 +227,8 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 - **First boot secrets**: The Docker entrypoint will automatically generate `JWT_SECRET_KEY` and `ENCRYPTION_KEY` on first boot and save them to `backend_data/app_secrets.env`.
 - **Database migrations**: If the database schema is outdated, run `docker compose exec backend alembic upgrade head`.
-- **Missing permissions**: Ensure `CORS_ORIGINS` in `.env` matches the URL you use to access the frontend.
+- **CORS errors in local development**: Set `CORS_ORIGINS=http://localhost:5173` in your `.env` file. In Docker production, CORS is not needed (Nginx proxies API requests internally).
+- **Discovery offline warning**: If you see a "Discovery Offline" banner, start Docker with `docker compose --profile discovery up -d` to activate background scanning workers.
 
 ---
 
@@ -172,7 +246,7 @@ Alternatively, you can run the provided helper scripts (`start.bat` on Windows o
 
 | Layer | Technology |
 |-------|-----------|
-| **Frontend** | React 18 + Vite, Tailwind CSS v4 |
+| **Frontend** | React 19 + Vite, Tailwind CSS v4 |
 | **Backend** | FastAPI, SQLAlchemy 2.0 (async), Pydantic v2 |
 | **Database** | PostgreSQL (asyncpg) |
 | **Background** | Celery + Redis |

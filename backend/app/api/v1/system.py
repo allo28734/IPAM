@@ -94,3 +94,39 @@ async def get_public_features(
     return FeatureFlagsResponse(
         enable_network_discovery=sys_settings.enable_network_discovery,
     )
+
+
+class DiscoveryHealthResponse(BaseModel):
+    discovery_enabled: bool
+    workers_online: bool
+
+
+@router.get("/discovery-health", response_model=DiscoveryHealthResponse)
+async def get_discovery_health(
+    sys_settings: SystemSettingsDep,
+):
+    """
+    Check if network discovery is enabled AND Celery workers are reachable.
+
+    Returns both the feature flag state and whether at least one worker
+    responded to a Celery ping. This lets the frontend warn the user
+    when discovery is enabled in settings but no workers are running
+    (e.g., Docker wasn't started with --profile discovery).
+    """
+    workers_online = False
+
+    if sys_settings.enable_network_discovery:
+        try:
+            from app.core.celery_app import celery_app
+            # ping() returns a list of dicts — one per worker that responded
+            # Use a short timeout to avoid blocking the API request
+            response = celery_app.control.ping(timeout=2.0)
+            workers_online = len(response) > 0
+        except Exception:
+            workers_online = False
+
+    return DiscoveryHealthResponse(
+        discovery_enabled=sys_settings.enable_network_discovery,
+        workers_online=workers_online,
+    )
+

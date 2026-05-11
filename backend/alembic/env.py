@@ -21,8 +21,11 @@ from app.models.user import User
 # access to the values within the .ini file in use.
 config = context.config
 
-# Override sqlalchemy.url with our settings
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Override sqlalchemy.url with our settings, swapping the async driver
+# for a synchronous one. Alembic migrations are inherently synchronous
+# DDL operations and cannot use the asyncpg driver.
+sync_url = settings.database_url.replace("+asyncpg", "+psycopg")
+config.set_main_option("sqlalchemy.url", sync_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

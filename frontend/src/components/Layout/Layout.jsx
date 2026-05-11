@@ -6,13 +6,22 @@ import api from '../../lib/axios';
 const Layout = ({ children, securityWarnings = {} }) => {
   const [features, setFeatures] = useState({ enable_network_discovery: true });
   const [pendingCount, setPendingCount] = useState(0);
+  const [discoveryMismatch, setDiscoveryMismatch] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(
     () => sessionStorage.getItem('db_password_warning_dismissed') === 'true'
+  );
+  const [discoveryBannerDismissed, setDiscoveryBannerDismissed] = useState(
+    () => sessionStorage.getItem('discovery_warning_dismissed') === 'true'
   );
 
   const handleDismissBanner = () => {
     setBannerDismissed(true);
     sessionStorage.setItem('db_password_warning_dismissed', 'true');
+  };
+
+  const handleDismissDiscoveryBanner = () => {
+    setDiscoveryBannerDismissed(true);
+    sessionStorage.setItem('discovery_warning_dismissed', 'true');
   };
 
   useEffect(() => {
@@ -22,6 +31,13 @@ const Layout = ({ children, securityWarnings = {} }) => {
     api.get('/pending-subnets/count')
       .then(res => setPendingCount(res.data.count || 0))
       .catch(() => {});  // Silently fail if user is readonly
+    api.get('/system/discovery-health')
+      .then(res => {
+        if (res.data.discovery_enabled && !res.data.workers_online) {
+          setDiscoveryMismatch(true);
+        }
+      })
+      .catch(() => {});  // Silently fail — non-critical
   }, []);
   return (
     <div className="flex min-h-screen">
@@ -131,6 +147,25 @@ const Layout = ({ children, securityWarnings = {} }) => {
             </p>
             <button
               onClick={handleDismissBanner}
+              className="shrink-0 rounded p-1 text-amber-400 hover:bg-amber-500/20 hover:text-amber-200 transition-colors"
+              title="Dismiss for this session"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+        {/* Discovery Mismatch Warning Banner */}
+        {discoveryMismatch && !discoveryBannerDismissed && (
+          <div className="mx-4 mt-4 flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 backdrop-blur-sm px-4 py-3 text-amber-200 shadow-lg shadow-amber-500/5">
+            <Scan size={20} className="shrink-0 text-amber-400" />
+            <p className="flex-1 text-sm font-medium">
+              <span className="font-bold text-amber-300">Discovery Offline:</span>{' '}
+              Network discovery is enabled in settings but no background workers are running. Start Docker with{' '}
+              <code className="rounded bg-amber-500/20 px-1.5 py-0.5 text-xs font-mono text-amber-200">docker compose --profile discovery up -d</code>{' '}
+              to activate scanning.
+            </p>
+            <button
+              onClick={handleDismissDiscoveryBanner}
               className="shrink-0 rounded p-1 text-amber-400 hover:bg-amber-500/20 hover:text-amber-200 transition-colors"
               title="Dismiss for this session"
             >

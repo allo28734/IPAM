@@ -21,17 +21,16 @@ class Settings(BaseSettings):
 
     # Application metadata
     app_title: str = "IPAM — IP Address Management"
-    app_version: str = "5.0.0"
+    app_version: str = "6.1.0"
     debug: bool = False
 
     # Database — PostgreSQL via Docker (see docker-compose.yml)
     database_url: str = "postgresql+asyncpg://ipam_admin:ipam_internal_secure_db_pass@db:5432/ipam"
 
-    # CORS — allow local development frontend
-    cors_origins: list[str] = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ]
+    # CORS — In Docker production, Nginx proxies API requests internally
+    # so CORS is not needed (empty default). For local development, set
+    # CORS_ORIGINS=http://localhost:5173 in your .env file.
+    cors_origins: list[str] = []
 
     # JWT / Auth
     jwt_secret_key: str
