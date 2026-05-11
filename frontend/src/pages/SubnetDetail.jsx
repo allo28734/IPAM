@@ -26,6 +26,8 @@ const SubnetDetail = () => {
   const [importFile, setImportFile] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
+  const [importTaskId, setImportTaskId] = useState(null);
+  const [importStatus, setImportStatus] = useState(null);
 
   const formatLargeNumber = (num) => {
     if (num === null || num === undefined) return '';
@@ -98,6 +100,42 @@ const SubnetDetail = () => {
     };
   }, [sweeping, sweepTaskId]);
 
+  // ── Import Task Polling ──────────────────────────────────────
+  useEffect(() => {
+    let intervalId;
+
+    const checkImportStatus = async () => {
+      if (!importTaskId) return;
+      try {
+        const res = await api.get(`/subnets/ips/import/status/${importTaskId}`);
+        setImportStatus(res.data.status);
+
+        if (res.data.status === 'SUCCESS') {
+          setImporting(false);
+          setImportTaskId(null);
+          clearInterval(intervalId);
+          setImportResult(res.data.result);
+          fetchData();
+        } else if (res.data.status === 'FAILURE') {
+          setImporting(false);
+          setImportTaskId(null);
+          clearInterval(intervalId);
+          setImportResult({ error: 'Import task failed. Check server logs for details.' });
+        }
+      } catch (err) {
+        console.error("Failed to fetch import status", err);
+      }
+    };
+
+    if (importing && importTaskId) {
+      intervalId = setInterval(checkImportStatus, 2000);
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [importing, importTaskId]);
+
   const handleAutoAllocate = async () => {
     try {
       await api.post(`/subnets/${id}/ips/next-available`, { hostname: 'Auto-Allocated' });
@@ -168,18 +206,19 @@ const SubnetDetail = () => {
     if (!importFile) return;
     setImporting(true);
     setImportResult(null);
+    setImportStatus('PENDING');
     const formData = new FormData();
     formData.append('file', importFile);
     try {
       const response = await api.post(`/subnets/${id}/ips/import`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      setImportResult(response.data);
-      fetchData();
+      // Backend now returns a task_id — start polling
+      setImportTaskId(response.data.task_id);
     } catch (err) {
       setImportResult({ error: err.response?.data?.detail || 'Import failed' });
-    } finally {
       setImporting(false);
+    } finally {
       setImportFile(null);
     }
   };
@@ -477,7 +516,7 @@ const SubnetDetail = () => {
                   Close
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={importing || !importFile}>
-                  {importing ? 'Importing...' : 'Upload & Import'}
+                  {importing ? `Processing... (${importStatus || 'Starting'})` : 'Upload & Import'}
                 </button>
               </div>
             </form>

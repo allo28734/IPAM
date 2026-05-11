@@ -6,6 +6,8 @@ Delegates all business logic to IPAddressService.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Response
+from celery.result import AsyncResult
+from app.core.celery_app import celery_app
 
 from app.api.deps import IPServiceDep, SubnetServiceDep, get_current_user, get_current_active_admin
 from app.schemas.ip_address import (
@@ -78,18 +80,33 @@ async def export_ips(subnet_id: int, service: IPServiceDep):
 
 
 @router.post("/subnets/{subnet_id}/ips/import", dependencies=[Depends(get_current_active_admin)])
-async def import_ips(subnet_id: int, service: IPServiceDep, file: UploadFile = File(...)):
-    """Import IP addresses from a CSV file."""
+async def import_ips(subnet_id: int, file: UploadFile = File(...)):
+    """Import IP addresses from a CSV file (processed in a background task)."""
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="File must be a CSV")
         
     if file.size is not None and file.size > 5 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File size exceeds 5MB limit")
-        
-    import codecs
-    iterator = codecs.iterdecode(file.file, 'utf-8-sig')
-    result = await service.bulk_import(subnet_id, iterator)
-    return result
+
+    from app.worker.import_tasks import run_bulk_ip_import
+
+    # Read the file content into a string for Celery serialization
+    raw_bytes = await file.read()
+    csv_text = raw_bytes.decode("utf-8-sig")
+
+    task = run_bulk_ip_import.delay(subnet_id, csv_text)
+    return {"task_id": task.id, "message": "Import initiated in the background"}
+
+
+@router.get("/subnets/ips/import/status/{task_id}")
+def get_ip_import_status(task_id: str):
+    """Check the status of a background IP CSV import Celery task."""
+    result = AsyncResult(task_id, app=celery_app)
+    return {
+        "task_id": task_id,
+        "status": result.state,
+        "result": result.result if result.ready() else None,
+    }
 
 
 # ── Assign a specific IP ───────────────────────────────────────

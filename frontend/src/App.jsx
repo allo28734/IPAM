@@ -14,7 +14,7 @@ import DiscoveryProfiles from './pages/DiscoveryProfiles';
 import Integrations from './pages/Integrations';
 import ApprovalQueue from './pages/ApprovalQueue';
 
-function SetupCheck({ children }) {
+function SetupCheck({ children, onSecurityWarnings }) {
   const [checking, setChecking] = useState(true);
   const navigate = useNavigate();
 
@@ -24,6 +24,10 @@ function SetupCheck({ children }) {
         if (res.data.needs_setup) {
           navigate('/setup');
         }
+        // Propagate security warnings to parent
+        if (res.data.using_default_db_password) {
+          onSecurityWarnings({ usingDefaultDbPassword: true });
+        }
       })
       .catch(err => {
         console.error("Failed to check setup status", err);
@@ -31,7 +35,7 @@ function SetupCheck({ children }) {
       .finally(() => {
         setChecking(false);
       });
-  }, [navigate]);
+  }, [navigate, onSecurityWarnings]);
 
   if (checking) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
 
@@ -50,9 +54,13 @@ function ProtectedRoute() {
 }
 
 function App() {
+  const [securityWarnings, setSecurityWarnings] = useState({
+    usingDefaultDbPassword: false,
+  });
+
   return (
     <Router>
-      <SetupCheck>
+      <SetupCheck onSecurityWarnings={setSecurityWarnings}>
         <Routes>
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
@@ -63,7 +71,7 @@ function App() {
           <Route element={<ProtectedRoute />}>
             <Route
               element={
-                <Layout>
+                <Layout securityWarnings={securityWarnings}>
                   <Outlet />
                 </Layout>
               }
@@ -84,3 +92,4 @@ function App() {
 }
 
 export default App;
+

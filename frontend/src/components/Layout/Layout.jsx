@@ -1,11 +1,19 @@
 import { useState, useEffect } from 'react';
-import { Network, LayoutDashboard, History, Scan, Plug, ClipboardCheck } from 'lucide-react';
+import { Network, LayoutDashboard, History, Scan, Plug, ClipboardCheck, ShieldAlert, X } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import api from '../../lib/axios';
 
-const Layout = ({ children }) => {
+const Layout = ({ children, securityWarnings = {} }) => {
   const [features, setFeatures] = useState({ enable_network_discovery: true });
   const [pendingCount, setPendingCount] = useState(0);
+  const [bannerDismissed, setBannerDismissed] = useState(
+    () => sessionStorage.getItem('db_password_warning_dismissed') === 'true'
+  );
+
+  const handleDismissBanner = () => {
+    setBannerDismissed(true);
+    sessionStorage.setItem('db_password_warning_dismissed', 'true');
+  };
 
   useEffect(() => {
     api.get('/system/features')
@@ -111,6 +119,25 @@ const Layout = ({ children }) => {
 
       {/* Main Content Area */}
       <main className="flex-1 ml-[var(--spacing-sidebar)] flex flex-col min-h-screen">
+        {/* Security Warning Banner */}
+        {securityWarnings.usingDefaultDbPassword && !bannerDismissed && (
+          <div className="mx-4 mt-4 flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 backdrop-blur-sm px-4 py-3 text-amber-200 shadow-lg shadow-amber-500/5">
+            <ShieldAlert size={20} className="shrink-0 text-amber-400" />
+            <p className="flex-1 text-sm font-medium">
+              <span className="font-bold text-amber-300">Security Warning:</span>{' '}
+              You are using the default database password. Please update{' '}
+              <code className="rounded bg-amber-500/20 px-1.5 py-0.5 text-xs font-mono text-amber-200">DB_PASSWORD</code>{' '}
+              in your <code className="rounded bg-amber-500/20 px-1.5 py-0.5 text-xs font-mono text-amber-200">.env</code> file and restart.
+            </p>
+            <button
+              onClick={handleDismissBanner}
+              className="shrink-0 rounded p-1 text-amber-400 hover:bg-amber-500/20 hover:text-amber-200 transition-colors"
+              title="Dismiss for this session"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
         {children}
       </main>
     </div>
@@ -118,3 +145,4 @@ const Layout = ({ children }) => {
 };
 
 export default Layout;
+

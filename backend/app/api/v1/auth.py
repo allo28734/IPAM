@@ -51,8 +51,14 @@ def _sso_is_configured(sys_settings) -> bool:
 
 @router.get("/setup-status")
 async def get_setup_status(db: DbSession):
-    """Check if the system requires first-run setup."""
-    return {"needs_setup": await is_setup_required(db)}
+    """Check if the system requires first-run setup and report security warnings."""
+    DEFAULT_DB_PASSWORD = "ipam_internal_secure_db_pass"
+    using_default = DEFAULT_DB_PASSWORD in settings.database_url
+
+    return {
+        "needs_setup": await is_setup_required(db),
+        "using_default_db_password": using_default,
+    }
 
 
 # ── Login / Token ──────────────────────────────────────────────
